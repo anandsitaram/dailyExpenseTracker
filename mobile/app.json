@@ -1,1 +1,44 @@
-{"expo":{"name":"Daily Expense Tracker","slug":"daily-expense-tracker","version":"1.0.0","orientation":"portrait","userInterfaceStyle":"automatic","android":{"package":"com.dailyexpensetracker.app"},"ios":{"bundleIdentifier":"com.dailyexpensetracker.app"}}}
+{
+  "expo": {
+    "name": "Daily Expense Tracker",
+    "slug": "daily-expense-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F3F5EE"
+    },
+    "android": {
+      "package": "com.dailyexpensetracker.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F3F5EE"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.dailyexpensetracker.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d0e3fbd0-4de3-418d-b660-1a6e43e96550"
+      }
+    }
+  }
+}
