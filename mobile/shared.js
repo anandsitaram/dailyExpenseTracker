@@ -1,9 +1,11 @@
 export const defaultCategories=[
+{id:'salary',name:'Salary',icon:'💵',income:true},
 {id:'food',name:'Food',icon:'🍔'},{id:'groceries',name:'Groceries',icon:'🛒'},{id:'home',name:'Home',icon:'🏠'},
 {id:'transport',name:'Transport',icon:'🚗'},{id:'fuel',name:'Fuel',icon:'⛽'},{id:'medical',name:'Medical',icon:'💊'},
 {id:'bills',name:'Bills',icon:'📱'},{id:'education',name:'Education',icon:'🎓'},{id:'shopping',name:'Shopping',icon:'👕'},
 {id:'entertainment',name:'Entertainment',icon:'🎬'},{id:'travel',name:'Travel',icon:'✈️'},{id:'investment',name:'Investment',icon:'💰'},
 {id:'gifts',name:'Gifts',icon:'🎁'},{id:'other',name:'Other',icon:'📦'}];
+export const isIncomeCategory=(categories,id)=>categories.find(c=>c.id===id)?.income===true;
 export const paymentMethods=['Cash','UPI','Credit Card','Debit Card','Bank Transfer'];
 export const demoExpenses=[
 {id:'1',date:'2026-09-06',amount:350,category:'food',description:'Breakfast',paymentMethod:'UPI',note:''},

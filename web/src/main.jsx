@@ -2,7 +2,7 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,CartesianGrid,BarChart,Bar} from 'recharts';
 import * as XLSX from 'xlsx';
-import {defaultCategories,paymentMethods,demoExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows} from './shared';
+import {defaultCategories,paymentMethods,demoExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory} from './shared';
 import {secureGet,secureSet} from './secureStorage';
 import './style.css';
 
@@ -13,32 +13,39 @@ function App(){
  const [expenses,setExpenses]=useState(demoExpenses);
  const [categories,setCategories]=useState(defaultCategories);
  const [budget,setBudget]=useState(40000);
+ const [profile,setProfile]=useState({firstName:'',lastName:'',nickName:'',email:''});
  const [loaded,setLoaded]=useState(false);
- const [tab,setTab]=useState('dashboard'),[prevTab,setPrevTab]=useState('dashboard'),[editing,setEditing]=useState(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('all');
+ const [tab,setTab]=useState('dashboard'),[editing,setEditing]=useState(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('all');
+ const [addPresetDate,setAddPresetDate]=useState(null);
  const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState('');
  const now=new Date();
  const [calYear,setCalYear]=useState(now.getFullYear());
  const [calMonth,setCalMonth]=useState(now.getMonth());
- const [selectedDay,setSelectedDay]=useState(null);
 
  // Load once on mount (decrypting from IndexedDB-backed key + localStorage ciphertext).
  useEffect(()=>{(async()=>{
-  const [e,c,b]=await Promise.all([
+  const [e,c,b,p]=await Promise.all([
    secureGet('det-expenses',demoExpenses),
    secureGet('det-categories',defaultCategories),
-   secureGet('det-budget',40000)
+   secureGet('det-budget',40000),
+   secureGet('det-profile',{firstName:'',lastName:'',nickName:'',email:''})
   ]);
-  setExpenses(e);setCategories(c);setBudget(b);setLoaded(true)
+  setExpenses(e);setCategories(c);setBudget(b);setProfile(p);setLoaded(true)
  })()},[]);
  // Guarded by `loaded` so we never encrypt-and-overwrite storage with the initial
  // placeholder state before the real data has finished loading.
  useEffect(()=>{if(loaded)secureSet('det-expenses',expenses).catch(console.error)},[expenses,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-categories',categories).catch(console.error)},[categories,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-budget',budget).catch(console.error)},[budget,loaded]);
+ useEffect(()=>{if(loaded)secureSet('det-profile',profile).catch(console.error)},[profile,loaded]);
 
- const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7))); const monthTotal=total(month);
- const byCat=useMemo(()=>categories.map(c=>({name:c.name,value:total(month.filter(e=>e.category===c.id))})).filter(x=>x.value),[month,categories]);
- const daily=useMemo(()=>{let m={};month.forEach(e=>m[e.date]=(m[e.date]||0)+Number(e.amount));return Object.entries(m).sort().map(([date,amount])=>({date:date.slice(5),amount}))},[month]);
+ const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7)));
+ const monthExpenseItems=month.filter(e=>!isIncomeCategory(categories,e.category));
+ const monthIncomeItems=month.filter(e=>isIncomeCategory(categories,e.category));
+ const monthTotal=total(monthExpenseItems);
+ const monthIncomeTotal=total(monthIncomeItems);
+ const byCat=useMemo(()=>categories.filter(c=>!c.income).map(c=>({name:c.name,value:total(monthExpenseItems.filter(e=>e.category===c.id))})).filter(x=>x.value),[monthExpenseItems,categories]);
+ const daily=useMemo(()=>{let m={};monthExpenseItems.forEach(e=>m[e.date]=(m[e.date]||0)+Number(e.amount));return Object.entries(m).sort().map(([date,amount])=>({date:date.slice(5),amount}))},[monthExpenseItems]);
  const top=byCat.slice().sort((a,b)=>b.value-a.value)[0];
  const visible=expenses.filter(e=>
    (e.description+' '+e.note).toLowerCase().includes(search.toLowerCase())
@@ -47,16 +54,15 @@ function App(){
    &&(!dateTo||e.date<=dateTo)
   ).sort((a,b)=>b.date.localeCompare(a.date));
  const dateFilterActive=dateFrom||dateTo;
+ const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
 
  const spendByDay=useMemo(()=>{const m={};expenses.forEach(e=>{m[e.date]=(m[e.date]||0)+Number(e.amount)});return m},[expenses]);
- const selectedDayExpenses=useMemo(()=>selectedDay?expenses.filter(e=>e.date===selectedDay).sort((a,b)=>b.date.localeCompare(a.date)):null,[selectedDay,expenses]);
 
  function saveExpense(x){setExpenses(p=>editing?p.map(e=>e.id===x.id?x:e):[x,...p]);setEditing(null);setTab('expenses')}
  function remove(id){if(confirm('Delete this expense?'))setExpenses(p=>p.filter(e=>e.id!==id))}
- function startAdd(){setEditing(null);setTab('add')}
- function startEdit(x){setEditing(x);setTab('add')}
- function openDay(d){setSelectedDay(d);setPrevTab(tab==='daydetail'?prevTab:tab);setTab('daydetail')}
- function closeDay(){setTab(prevTab);setSelectedDay(null)}
+ function startAdd(presetDate){setEditing(null);setAddPresetDate(presetDate||null);setTab('add')}
+ function startEdit(x){setEditing(x);setAddPresetDate(null);setTab('add')}
+ function openDay(d){setDateFrom(d);setDateTo(d);setTab('expenses')}
 
  function exportCSV(){
   const rows=[['Date','Amount','Category','Description','Payment Method','Note'],...expenses.map(e=>[e.date,e.amount,categories.find(c=>c.id===e.category)?.name||'',e.description,e.paymentMethod,e.note||''])];
@@ -77,22 +83,22 @@ function App(){
  return <div className="app">
   <aside>
    <div className="brand"><span className="mark">💰</span><span>DailyExpense</span></div>
-   <div className="nav">{[['dashboard','⌂','Dashboard'],['expenses','☷','Expenses'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories']].map(x=>
+   <div className="nav">{[['dashboard','⌂','Dashboard'],['expenses','☷','Expenses'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
     <button key={x[0]} className={tab===x[0]?'active':''} onClick={()=>setTab(x[0])}><b>{x[1]}</b>{x[2]}</button>)}
    </div>
    <div className="sideCard"><h4>Upgrade to Pro</h4><p>Full history sync & insights.</p><button className="accent" style={{width:'100%'}}>Upgrade now</button></div>
   </aside>
   <main>
    <header>
-    <div><div className="eyebrow">PERSONAL FINANCE</div><h1>{tab==='dashboard'?'Good morning 👋':tab==='daydetail'?'Day detail':tab[0].toUpperCase()+tab.slice(1)}</h1><p>Track everyday spending without the clutter.</p></div>
-    <div className="headerActions"><button className="primary" onClick={startAdd}>＋ Add expense</button></div>
+    <div><div className="eyebrow">PERSONAL FINANCE</div><h1>{tab==='dashboard'?(profile.nickName?`Hi ${profile.nickName} 👋`:'Hi there! 👋'):tab[0].toUpperCase()+tab.slice(1)}</h1><p>Track everyday spending without the clutter.</p></div>
+    <div className="headerActions"><button className="primary" onClick={()=>startAdd()}>＋ Add expense</button></div>
    </header>
 
    {tab==='dashboard'&&<>
     <section className="cards">
      <Metric title="This month" value={formatINR(monthTotal)}/>
+     <Metric title="Income this month" value={formatINR(monthIncomeTotal)}/>
      <Metric title="Transactions" value={month.length}/>
-     <Metric title="Avg. transaction" value={formatINR(month.length?monthTotal/month.length:0)}/>
      <Metric title="Top category" value={top?.name||'—'}/>
     </section>
     <div className="grid">
@@ -104,26 +110,17 @@ function App(){
       <CalendarView
        year={calYear} month={calMonth}
        spendByDay={spendByDay}
-       selectedDay={null}
        onSelectDay={openDay}
        onPrev={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1)}else setCalMonth(m=>m-1)}}
        onNext={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1)}else setCalMonth(m=>m+1)}}
       />
-      <p className="hint">Tap any day to open its expenses.</p>
+      <p className="hint">Tap any day to view and add expenses for that date.</p>
      </Panel>
      <Panel title="Recent expenses">
       <ExpenseList items={expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6)} cats={categories} onEdit={startEdit} onDelete={remove}/>
      </Panel>
     </div>
    </>}
-
-   {tab==='daydetail'&&<Panel title={selectedDay}>
-    <div className="panelHead" style={{marginTop:-8,marginBottom:16}}>
-     <button className="mini" onClick={closeDay}>← Back</button>
-     <strong>{formatINR(total(selectedDayExpenses||[]))} total</strong>
-    </div>
-    <ExpenseList items={selectedDayExpenses||[]} cats={categories} onEdit={startEdit} onDelete={remove}/>
-   </Panel>}
 
    {tab==='expenses'&&<Panel title="Expense history">
     <div className="toolbar">
@@ -138,21 +135,26 @@ function App(){
      <button onClick={exportCSV}>Export CSV</button>
      <button onClick={exportExcel}>Export Excel</button>
     </div>
+    {singleDaySelected&&<div className="panelHead" style={{marginTop:-6}}>
+     <span className="hint" style={{margin:0}}>Showing {singleDaySelected} · {formatINR(total(visible))} total</span>
+     <button className="primary mini" onClick={()=>startAdd(singleDaySelected)}>＋ Add expense for this date</button>
+    </div>}
     <ExpenseList items={visible} cats={categories} onEdit={startEdit} onDelete={remove}/>
    </Panel>}
 
-   {tab==='add'&&<ExpenseForm key={editing?editing.id:'new'} initial={editing} cats={categories} onCancel={()=>setTab('expenses')} onSave={saveExpense}/>}
+   {tab==='add'&&<ExpenseForm key={editing?editing.id:('new-'+(addPresetDate||''))} initial={editing} presetDate={addPresetDate} cats={categories} onCancel={()=>setTab('expenses')} onSave={saveExpense}/>}
 
    {tab==='analytics'&&<>
     <div className="grid">
      <Panel title="Category spending"><Donut data={byCat}/></Panel>
      <Panel title="Daily spending"><Trend data={daily}/></Panel>
     </div>
-    <Panel title="Monthly overview"><MonthlyBars expenses={expenses}/></Panel>
+    <Panel title="Monthly overview (income vs expense)"><MonthlyBars expenses={expenses} categories={categories}/></Panel>
    </>}
 
    {tab==='budget'&&<Budget budget={budget} setBudget={setBudget} spent={monthTotal}/>}
    {tab==='categories'&&<CategoryManager cats={categories} setCats={setCategories}/>}
+   {tab==='profile'&&<Profile profile={profile} setProfile={setProfile}/>}
   </main>
  </div>
 }
@@ -176,8 +178,8 @@ function ExpenseList({items,cats,onEdit,onDelete}){
  </div>
 }
 
-function ExpenseForm({initial,cats,onCancel,onSave}){
- const [f,setF]=useState(initial||{id:null,date:today(),amount:'',category:cats[0]?.id,description:'',paymentMethod:'UPI',note:''});
+function ExpenseForm({initial,presetDate,cats,onCancel,onSave}){
+ const [f,setF]=useState(initial||{id:null,date:presetDate||today(),amount:'',category:cats[0]?.id,description:'',paymentMethod:'UPI',note:''});
  const set=(k,v)=>setF({...f,[k]:v});
  return <Panel title={initial?'Edit expense':'Add expense'}>
   <form className="form" onSubmit={e=>{e.preventDefault();if(Number(f.amount)>0)onSave({...f,amount:Number(f.amount),id:f.id||Date.now().toString()})}}>
@@ -202,6 +204,19 @@ function CategoryManager({cats,setCats}){
  </Panel>
 }
 
+function Profile({profile,setProfile}){
+ const set=(k,v)=>setProfile({...profile,[k]:v});
+ return <Panel title="Profile">
+  <div className="form">
+   <label>First name<input value={profile.firstName||''} onChange={e=>set('firstName',e.target.value)} placeholder="Jane"/></label>
+   <label>Last name<input value={profile.lastName||''} onChange={e=>set('lastName',e.target.value)} placeholder="Doe"/></label>
+   <label>Nickname<input value={profile.nickName||''} onChange={e=>set('nickName',e.target.value)} placeholder="How the dashboard greets you"/></label>
+   <label>Email<input type="email" value={profile.email||''} onChange={e=>set('email',e.target.value)} placeholder="jane@example.com"/></label>
+  </div>
+  <p className="hint">Saved automatically, and encrypted at rest like the rest of your data. Set a nickname to personalize your dashboard greeting.</p>
+ </Panel>
+}
+
 function Budget({budget,setBudget,spent}){
  const pct=budget>0?Math.min(100,spent/budget*100):0;
  return <Panel title="Monthly budget">
@@ -214,13 +229,18 @@ function Budget({budget,setBudget,spent}){
 
 const Donut=({data})=><div className="chart"><ResponsiveContainer><PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95}>{data.map((_,i)=><Cell key={i} fill={PALETTE[i%PALETTE.length]}/>)}</Pie><Tooltip formatter={v=>formatINR(v)}/></PieChart></ResponsiveContainer></div>;
 const Trend=({data})=><div className="chart"><ResponsiveContainer><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="#EAEDE3"/><XAxis dataKey="date"/><YAxis/><Tooltip formatter={v=>formatINR(v)}/><Line type="monotone" dataKey="amount" stroke="#8BC63E" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div>;
-function MonthlyBars({expenses}){
- let m={};expenses.forEach(e=>{let k=e.date.slice(0,7);m[k]=(m[k]||0)+Number(e.amount)});
- let d=Object.entries(m).sort().slice(-6).map(([month,amount])=>({month,amount}));
- return <div className="chart"><ResponsiveContainer><BarChart data={d}><CartesianGrid strokeDasharray="3 3" stroke="#EAEDE3"/><XAxis dataKey="month"/><YAxis/><Tooltip formatter={v=>formatINR(v)}/><Bar dataKey="amount" fill="#8BC63E" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></div>
+function MonthlyBars({expenses,categories}){
+ let m={};expenses.forEach(e=>{
+  let k=e.date.slice(0,7);
+  if(!m[k])m[k]={month:k,expense:0,income:0};
+  if(isIncomeCategory(categories,e.category))m[k].income+=Number(e.amount);
+  else m[k].expense+=Number(e.amount);
+ });
+ let d=Object.values(m).sort((a,b)=>a.month.localeCompare(b.month)).slice(-6);
+ return <div className="chart"><ResponsiveContainer><BarChart data={d}><CartesianGrid strokeDasharray="3 3" stroke="#EAEDE3"/><XAxis dataKey="month"/><YAxis/><Tooltip formatter={v=>formatINR(v)}/><Bar dataKey="expense" name="Expense" fill="#8BC63E" radius={[6,6,0,0]}/><Bar dataKey="income" name="Income" fill="#F5A623" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></div>
 }
 
-function CalendarView({year,month,spendByDay,selectedDay,onSelectDay,onPrev,onNext}){
+function CalendarView({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  const cells=useMemo(()=>buildCalendarGrid(year,month),[year,month]);
  const todayKey=today();
  return <div className="calendar">
@@ -234,7 +254,7 @@ function CalendarView({year,month,spendByDay,selectedDay,onSelectDay,onPrev,onNe
     const key=dateKey(c.y,c.m,c.day);
     const amt=spendByDay[key];
     return <div key={i}
-     className={'calCell'+(c.inMonth?'':' outMonth')+(key===todayKey?' today':'')+(key===selectedDay?' selected':'')+(amt&&!(key===selectedDay)?' hasSpend':'')}
+     className={'calCell'+(c.inMonth?'':' outMonth')+(key===todayKey?' today':'')+(amt?' hasSpend':'')}
      onClick={()=>c.inMonth&&onSelectDay(key)}>
      <span className="calDay">{c.day}</span>
      {amt?<span className="calAmt">{formatINR(amt).replace('₹','')}</span>:null}

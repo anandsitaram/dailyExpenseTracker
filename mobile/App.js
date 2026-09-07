@@ -4,48 +4,54 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
 import {secureGetItem,secureSetItem} from './secureStorage';
-import {defaultCategories,paymentMethods,demoExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows} from './shared';
+import {defaultCategories,paymentMethods,demoExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory} from './shared';
 
 const today=()=>new Date().toISOString().slice(0,10);
 
 export default function App(){
  const [expenses,setExpenses]=useState([]),[cats,setCats]=useState(defaultCategories),[budget,setBudget]=useState(40000),[loaded,setLoaded]=useState(false);
- const [tab,setTab]=useState('home'),[prevTab,setPrevTab]=useState('home');
+ const [profile,setProfile]=useState({firstName:'',lastName:'',nickName:'',email:''});
+ const [tab,setTab]=useState('home');
  const [editingId,setEditingId]=useState(null);
  const [amount,setAmount]=useState(''),[desc,setDesc]=useState(''),[category,setCategory]=useState('food'),[method,setMethod]=useState('UPI'),[date,setDate]=useState(today()),[note,setNote]=useState('');
  const [newCat,setNewCat]=useState('');
  const [search,setSearch]=useState('');
  const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState(''),[showDateFilter,setShowDateFilter]=useState(false);
  const now=new Date();
- const [calYear,setCalYear]=useState(now.getFullYear()),[calMonth,setCalMonth]=useState(now.getMonth()),[selectedDay,setSelectedDay]=useState(null);
+ const [calYear,setCalYear]=useState(now.getFullYear()),[calMonth,setCalMonth]=useState(now.getMonth());
 
  useEffect(()=>{(async()=>{
   let e=await secureGetItem('expenses',demoExpenses);
   let c=await secureGetItem('categories',defaultCategories);
   let b=Number(await secureGetItem('budget',40000));
-  setExpenses(e);setCats(c);setBudget(b);setLoaded(true)
+  let p=await secureGetItem('profile',{firstName:'',lastName:'',nickName:'',email:''});
+  setExpenses(e);setCats(c);setBudget(b);setProfile(p);setLoaded(true)
  })()},[]);
  // guarded by `loaded` so we never overwrite storage with the initial empty state before load finishes
  useEffect(()=>{if(loaded)secureSetItem('expenses',expenses).catch(console.error)},[expenses,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('categories',cats).catch(console.error)},[cats,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('budget',budget).catch(console.error)},[budget,loaded]);
+ useEffect(()=>{if(loaded)secureSetItem('profile',profile).catch(console.error)},[profile,loaded]);
 
- const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7))),spent=total(month),pct=budget>0?Math.min(100,spent/budget*100):0;
- const byCat=useMemo(()=>cats.map(c=>({...c,value:total(month.filter(e=>e.category===c.id))})).filter(c=>c.value).sort((a,b)=>b.value-a.value),[month,cats]);
+ const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7)));
+ const monthExpenseItems=month.filter(e=>!isIncomeCategory(cats,e.category));
+ const monthIncomeItems=month.filter(e=>isIncomeCategory(cats,e.category));
+ const spent=total(monthExpenseItems),income=total(monthIncomeItems);
+ const pct=budget>0?Math.min(100,spent/budget*100):0;
+ const byCat=useMemo(()=>cats.filter(c=>!c.income).map(c=>({...c,value:total(monthExpenseItems.filter(e=>e.category===c.id))})).filter(c=>c.value).sort((a,b)=>b.value-a.value),[monthExpenseItems,cats]);
  const spendByDay=useMemo(()=>{const m={};expenses.forEach(e=>{m[e.date]=(m[e.date]||0)+Number(e.amount)});return m},[expenses]);
- const selectedDayExpenses=useMemo(()=>selectedDay?expenses.filter(e=>e.date===selectedDay):null,[selectedDay,expenses]);
  const visibleExpenses=useMemo(()=>expenses.filter(e=>
    (e.description+' '+(e.note||'')).toLowerCase().includes(search.toLowerCase())
    &&(!dateFrom||e.date>=dateFrom)
    &&(!dateTo||e.date<=dateTo)
   ).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,search,dateFrom,dateTo]);
  const dateFilterActive=dateFrom||dateTo;
+ const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
 
- function resetForm(){setEditingId(null);setAmount('');setDesc('');setCategory(cats[0]?.id||'food');setMethod('UPI');setDate(today());setNote('')}
+ function resetForm(presetDate){setEditingId(null);setAmount('');setDesc('');setCategory(cats.find(c=>!c.income)?.id||cats[0]?.id||'food');setMethod('UPI');setDate(presetDate||today());setNote('')}
  function startEdit(e){setEditingId(e.id);setAmount(String(e.amount));setDesc(e.description||'');setCategory(e.category);setMethod(e.paymentMethod);setDate(e.date);setNote(e.note||'');setTab('add')}
- function startAdd(){resetForm();setTab('add')}
- function openDay(d){setSelectedDay(d);setPrevTab(tab==='daydetail'?prevTab:tab);setTab('daydetail')}
- function closeDay(){setTab(prevTab);setSelectedDay(null)}
+ function startAdd(presetDate){resetForm(presetDate);setTab('add')}
+ function openDay(d){setDateFrom(d);setDateTo(d);setSearch('');setShowDateFilter(true);setTab('expenses')}
  function save(){
   if(!Number(amount))return Alert.alert('Enter amount');
   if(editingId){
@@ -75,7 +81,7 @@ export default function App(){
   else Alert.alert('Saved',uri)
  }
 
- const Nav=()=><View style={s.nav}>{[['home','⌂','Home'],['expenses','☷','Expenses'],['add','＋','Add'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories']].map(x=>
+ const Nav=()=><View style={s.nav}>{[['home','⌂','Home'],['expenses','☷','Expenses'],['add','＋','Add'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
   <TouchableOpacity key={x[0]} onPress={()=>x[0]==='add'?startAdd():setTab(x[0])} style={s.navItem}>
    <Text style={[s.navIcon,tab===x[0]&&s.navActive]}>{x[1]}</Text>
    <Text style={tab===x[0]?s.navTextActive:s.navText}>{x[2]}</Text>
@@ -85,28 +91,19 @@ export default function App(){
  return <SafeAreaView style={s.safe}>
   <ScrollView contentContainerStyle={s.container}>
    {tab==='home'&&<>
-    <Text style={s.title}>Good morning 👋</Text>
+    <Text style={s.title}>{profile.nickName?`Hi ${profile.nickName} 👋`:'Hi there! 👋'}</Text>
     <Text style={s.muted}>Personal spending dashboard</Text>
     <View style={s.hero}><Text style={s.mutedLight}>This month</Text><Text style={s.total}>{formatINR(spent)}</Text><Text style={s.mutedLight}>{month.length} transactions</Text></View>
-    <View style={s.two}><Stat t="Average" v={formatINR(month.length?spent/month.length:0)}/><Stat t="Top category" v={byCat[0]?.name||'—'}/></View>
+    <View style={s.two}><Stat t="Income this month" v={formatINR(income)}/><Stat t="Top category" v={byCat[0]?.name||'—'}/></View>
     <Section title="Calendar">
-     <Calendar year={calYear} month={calMonth} spendByDay={spendByDay} selectedDay={null}
+     <Calendar year={calYear} month={calMonth} spendByDay={spendByDay}
       onSelectDay={openDay}
       onPrev={()=>{if(calMonth===0){setCalMonth(11);setCalYear(calYear-1)}else setCalMonth(calMonth-1)}}
       onNext={()=>{if(calMonth===11){setCalMonth(0);setCalYear(calYear+1)}else setCalMonth(calMonth+1)}}/>
-     <Text style={s.hint}>Tap any day to open its expenses.</Text>
+     <Text style={s.hint}>Tap any day to view and add expenses for that date.</Text>
     </Section>
     <Section title="Recent expenses">{expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(e=><Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense}/>)}</Section>
    </>}
-
-   {tab==='daydetail'&&<Section title={selectedDay||''}>
-    <View style={s.rowTop}>
-     <TouchableOpacity onPress={closeDay}><Text style={s.linkBtn}>← Back</Text></TouchableOpacity>
-     <Text style={s.bold}>{formatINR(total(selectedDayExpenses||[]))} total</Text>
-    </View>
-    {(selectedDayExpenses||[]).map(e=><Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense}/>)}
-    {!(selectedDayExpenses||[]).length&&<Text style={s.muted}>No expenses on this day.</Text>}
-   </Section>}
 
    {tab==='expenses'&&<Section title="Expense history">
     <TextInput style={s.input} placeholder="Search description or note" value={search} onChangeText={setSearch}/>
@@ -116,6 +113,7 @@ export default function App(){
      <View style={{flex:1}}><Text style={s.smallLabel}>To (YYYY-MM-DD)</Text><TextInput style={s.input} value={dateTo} onChangeText={setDateTo} placeholder="2026-09-30"/></View>
     </View>}
     {dateFilterActive&&<TouchableOpacity onPress={()=>{setDateFrom('');setDateTo('')}}><Text style={s.danger}>Clear date filter</Text></TouchableOpacity>}
+    {singleDaySelected&&<TouchableOpacity style={s.secondary} onPress={()=>startAdd(singleDaySelected)}><Text style={s.secondaryText}>＋ Add expense for {singleDaySelected}</Text></TouchableOpacity>}
     <TouchableOpacity style={s.secondary} onPress={exportExcel}><Text style={s.secondaryText}>Export to Excel</Text></TouchableOpacity>
     {visibleExpenses.map(e=><Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense}/>)}
     {!visibleExpenses.length&&<Text style={s.muted}>No expenses found.</Text>}
@@ -140,7 +138,8 @@ export default function App(){
 
    {tab==='analytics'&&<>
     <Section title="Category spending">{byCat.map(c=><View style={s.metric} key={c.id}><View style={s.rowTop}><Text>{c.icon} {c.name}</Text><Text style={s.bold}>{formatINR(c.value)}</Text></View><View style={s.track}><View style={[s.fill,{width:(spent?c.value/spent*100:0)+'%'}]}/></View></View>)}</Section>
-    <Section title="Daily spending">{Object.entries(month.reduce((m,e)=>(m[e.date]=(m[e.date]||0)+Number(e.amount),m),{})).sort().map(([d,v])=><View style={s.rowTop} key={d}><Text>{d}</Text><Text style={s.bold}>{formatINR(v)}</Text></View>)}</Section>
+    <Section title="Daily spending">{Object.entries(monthExpenseItems.reduce((m,e)=>(m[e.date]=(m[e.date]||0)+Number(e.amount),m),{})).sort().map(([d,v])=><View style={s.rowTop} key={d}><Text>{d}</Text><Text style={s.bold}>{formatINR(v)}</Text></View>)}</Section>
+    <Section title="Monthly overview (income vs expense)"><MonthlyOverview expenses={expenses} cats={cats}/></Section>
    </>}
 
    {tab==='budget'&&<Section title="Monthly budget">
@@ -154,6 +153,18 @@ export default function App(){
    {tab==='categories'&&<Section title="Categories">
     <View style={s.rowInline}><TextInput style={[s.input,{flex:1}]} placeholder="New category name" value={newCat} onChangeText={setNewCat}/><TouchableOpacity style={s.addCatBtn} onPress={addCategory}><Text style={s.primaryText}>＋ Add</Text></TouchableOpacity></View>
     <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)}><Text style={s.danger}> ✕</Text></TouchableOpacity>}</View>)}</View>
+   </Section>}
+
+   {tab==='profile'&&<Section title="Profile">
+    <Text style={s.label}>First name</Text>
+    <TextInput style={s.input} value={profile.firstName||''} onChangeText={x=>setProfile({...profile,firstName:x})} placeholder="Jane"/>
+    <Text style={s.label}>Last name</Text>
+    <TextInput style={s.input} value={profile.lastName||''} onChangeText={x=>setProfile({...profile,lastName:x})} placeholder="Doe"/>
+    <Text style={s.label}>Nickname</Text>
+    <TextInput style={s.input} value={profile.nickName||''} onChangeText={x=>setProfile({...profile,nickName:x})} placeholder="How the dashboard greets you"/>
+    <Text style={s.label}>Email</Text>
+    <TextInput style={s.input} keyboardType="email-address" autoCapitalize="none" value={profile.email||''} onChangeText={x=>setProfile({...profile,email:x})} placeholder="jane@example.com"/>
+    <Text style={s.hint}>Saved automatically, and encrypted at rest like the rest of your data. Set a nickname to personalize your dashboard greeting.</Text>
    </Section>}
   </ScrollView>
   <Nav/>
@@ -173,7 +184,29 @@ const Row=({e,cats,onEdit,onDelete})=>{
  </View>
 };
 
-function Calendar({year,month,spendByDay,selectedDay,onSelectDay,onPrev,onNext}){
+function MonthlyOverview({expenses,cats}){
+ const m={};
+ expenses.forEach(e=>{
+  const k=e.date.slice(0,7);
+  if(!m[k])m[k]={month:k,expense:0,income:0};
+  if(isIncomeCategory(cats,e.category))m[k].income+=Number(e.amount);
+  else m[k].expense+=Number(e.amount);
+ });
+ const rows=Object.values(m).sort((a,b)=>a.month.localeCompare(b.month)).slice(-6);
+ const max=Math.max(1,...rows.map(r=>Math.max(r.expense,r.income)));
+ return <View>
+  {rows.map(r=><View key={r.month} style={{marginBottom:14}}>
+   <Text style={s.bold}>{r.month}</Text>
+   <View style={s.rowTop}><Text style={s.muted}>Expense</Text><Text style={s.muted}>{formatINR(r.expense)}</Text></View>
+   <View style={s.track}><View style={[s.fill,{width:(r.expense/max*100)+'%'}]}/></View>
+   <View style={[s.rowTop,{marginTop:6}]}><Text style={s.muted}>Income</Text><Text style={s.muted}>{formatINR(r.income)}</Text></View>
+   <View style={s.track}><View style={[s.fill,s.fillWarn,{width:(r.income/max*100)+'%'}]}/></View>
+  </View>)}
+  {!rows.length&&<Text style={s.muted}>No data yet.</Text>}
+ </View>
+}
+
+function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  const cells=useMemo(()=>buildCalendarGrid(year,month),[year,month]);
  const todayKey=today();
  return <View>
@@ -186,11 +219,10 @@ function Calendar({year,month,spendByDay,selectedDay,onSelectDay,onPrev,onNext})
    {cells.map((c,i)=>{
     const key=dateKey(c.y,c.m,c.day);
     const amt=spendByDay[key];
-    const selected=key===selectedDay;
     return <TouchableOpacity key={i} disabled={!c.inMonth} onPress={()=>onSelectDay(key)}
-     style={[s.calCell,!c.inMonth&&s.calOut,key===todayKey&&s.calToday,amt&&!selected&&s.calSpend,selected&&s.calSelectedCell]}>
-     <Text style={[s.calDay,selected&&s.calDaySelected]}>{c.day}</Text>
-     {amt?<Text style={[s.calAmt,selected&&s.calDaySelected]} numberOfLines={1}>{formatINR(amt).replace('₹','')}</Text>:null}
+     style={[s.calCell,!c.inMonth&&s.calOut,key===todayKey&&s.calToday,amt&&s.calSpend]}>
+     <Text style={s.calDay}>{c.day}</Text>
+     {amt?<Text style={s.calAmt} numberOfLines={1}>{formatINR(amt).replace('₹','')}</Text>:null}
     </TouchableOpacity>
    })}
   </View>
