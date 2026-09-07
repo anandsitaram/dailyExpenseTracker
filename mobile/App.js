@@ -1,7 +1,7 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert} from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
 import * as XLSX from 'xlsx';
 import {secureGetItem,secureSetItem} from './secureStorage';
 import {defaultCategories,paymentMethods,demoExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory} from './shared';
@@ -75,10 +75,18 @@ export default function App(){
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Expenses');
   const wbout=XLSX.write(wb,{type:'base64',bookType:'xlsx'});
-  const uri=FileSystem.documentDirectory+'daily-expenses.xlsx';
-  await FileSystem.writeAsStringAsync(uri,wbout,{encoding:FileSystem.EncodingType.Base64});
-  if(await Sharing.isAvailableAsync())await Sharing.shareAsync(uri,{mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',dialogTitle:'Export expenses'});
-  else Alert.alert('Saved',uri)
+  const path=RNFS.DocumentDirectoryPath+'/daily-expenses.xlsx';
+  await RNFS.writeFile(path,wbout,'base64');
+  try{
+   await Share.open({
+    url:'file://'+path,
+    type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    title:'Export expenses',
+    failOnCancel:false
+   });
+  }catch(e){
+   Alert.alert('Saved to',path);
+  }
  }
 
  const Nav=()=><View style={s.nav}>{[['home','⌂','Home'],['expenses','☷','Expenses'],['add','＋','Add'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
