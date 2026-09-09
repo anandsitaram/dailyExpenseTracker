@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses} from './shared';
 import {secureGet,secureSet} from './secureStorage';
 import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
+import {Home,ListChecks,Plus,PieChart as PieChartIcon,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock} from 'lucide-react';
 import './style.css';
 
 const PALETTE=['#8BC63E','#F5A623','#4C8EF7','#B98BF0','#F26D6D','#39B8A6'];
@@ -181,8 +182,8 @@ function App(){
  return <div className="app">
   <aside>
    <div className="brand"><span className="mark">💰</span><span>DailyExpense</span></div>
-   <div className="nav">{[['dashboard','⌂','Dashboard'],['expenses','☷','Expenses'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
-    <button key={x[0]} className={tab===x[0]?'active':''} onClick={()=>setTab(x[0])}><b>{x[1]}</b>{x[2]}</button>)}
+   <div className="nav">{[['dashboard',Home,'Dashboard'],['expenses',ListChecks,'Expenses'],['analytics',PieChartIcon,'Analytics'],['budget',Target,'Budget'],['categories',Tags,'Categories'],['profile',User,'Profile']].map(([key,Icon,label])=>
+    <button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}><Icon size={17} strokeWidth={2.2}/>{label}</button>)}
    </div>
    <div className="sideCard"><h4>Upgrade to Pro</h4><p>Full history sync & insights.</p><button className="accent" style={{width:'100%'}}>Upgrade now</button></div>
   </aside>
@@ -192,7 +193,7 @@ function App(){
      <div className="avatarPreview small">{profile.avatarImage?<img src={profile.avatarImage} alt="Profile"/>:<span>{profile.avatar||'🙂'}</span>}</div>
      <div><div className="eyebrow">PERSONAL FINANCE</div><h1>{tab==='dashboard'?(profile.nickName?`Hi ${profile.nickName} 👋`:'Hi there! 👋'):tab[0].toUpperCase()+tab.slice(1)}</h1><p>Track everyday spending without the clutter.</p></div>
     </div>
-    <div className="headerActions"><button className="primary" onClick={()=>startAdd()}>＋ Add expense</button></div>
+    <div className="headerActions"><button className="primary btnRow" onClick={()=>startAdd()}><Plus size={16}/> Add expense</button></div>
    </header>
 
    {tab==='dashboard'&&<>
@@ -221,7 +222,7 @@ function App(){
      <Panel title="Recent expenses">
       {expenses.length?
        <ExpenseList items={expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6)} cats={categories} onEdit={startEdit} onDelete={remove}/>:
-       <EmptyState icon="🧾" text="No expenses yet. Add your first one to see it here." actionLabel="＋ Add expense" onAction={()=>startAdd()}/>}
+       <EmptyState icon="🧾" text="No expenses yet. Add your first one to see it here." actionLabel={<><Plus size={14}/> Add expense</>} onAction={()=>startAdd()}/>}
      </Panel>
     </div>
    </>}
@@ -243,12 +244,12 @@ function App(){
     </div>
     {singleDaySelected&&<div className="panelHead" style={{marginTop:-6}}>
      <span className="hint" style={{margin:0}}>Showing {singleDaySelected} · {formatINR(total(visible))} total</span>
-     <button className="primary mini" onClick={()=>startAdd(singleDaySelected)}>＋ Add expense for this date</button>
+     <button className="primary mini btnRow" onClick={()=>startAdd(singleDaySelected)}><Plus size={14}/> Add expense for this date</button>
     </div>}
     {visible.length?
      <ExpenseList items={visible} cats={categories} onEdit={startEdit} onDelete={remove}/>:
      (expenses.length?<EmptyState icon="🔍" text="No expenses match these filters."/>:
-      <EmptyState icon="🧾" text="You haven't added any expenses yet." actionLabel="＋ Add expense" onAction={()=>startAdd()}/>)}
+      <EmptyState icon="🧾" text="You haven't added any expenses yet." actionLabel={<><Plus size={14}/> Add expense</>} onAction={()=>startAdd()}/>)}
    </Panel>}
 
    {tab==='add'&&<ExpenseForm key={editing?editing.id:('new-'+(addPresetDate||''))} initial={editing} presetDate={addPresetDate} cats={categories} allExpenses={expenses} onEditExpense={startEdit} onDeleteExpense={remove} onCancel={()=>setTab('expenses')} onSave={saveExpense}/>}
@@ -287,7 +288,7 @@ function App(){
        <button className="mini" onClick={()=>toggleRecurring(t.id)}>{t.active?'Pause':'Resume'}</button>
        <button className="mini danger" onClick={()=>deleteRecurring(t.id)}>Delete</button>
       </div>
-     })}</div>:<EmptyState icon="🔁" text="No recurring expenses yet. Add one from the Add expense screen using the Repeat option." actionLabel="＋ Add expense" onAction={()=>startAdd()}/>}
+     })}</div>:<EmptyState icon="🔁" text="No recurring expenses yet. Add one from the Add expense screen using the Repeat option." actionLabel={<><Plus size={14}/> Add expense</>} onAction={()=>startAdd()}/>}
     </Panel>
    </>}
    {tab==='categories'&&<CategoryManager cats={categories} setCats={setCategories} expenses={expenses}/>}
@@ -305,11 +306,11 @@ function App(){
      <label className="wide">Backup password<input type="password" value={backupPassword} onChange={e=>setBackupPassword(e.target.value)} placeholder="At least 4 characters"/></label>
      <p className="hint">Your backup file is encrypted with this password. Daily Expense Tracker never stores it anywhere, so if you forget it, the backup can't be recovered - keep it somewhere safe.</p>
      <div className="toolbar">
-      <button className="primary" onClick={exportBackup}>⬇ Export backup</button>
+      <button className="primary btnRow" onClick={exportBackup}><Download size={16}/> Export backup</button>
      </div>
      <label className="wide" style={{marginTop:16}}>Backup password (to restore)<input type="password" value={restorePassword} onChange={e=>setRestorePassword(e.target.value)} placeholder="Needed only if the backup is encrypted"/></label>
      <div className="toolbar">
-      <label className="mini fileBtn">⬆ Restore from file<input type="file" accept="application/json" style={{display:'none'}} onChange={importBackup}/></label>
+      <label className="mini fileBtn btnRow"><Upload size={14}/> Restore from file<input type="file" accept="application/json" style={{display:'none'}} onChange={importBackup}/></label>
      </div>
     </Panel>
    </>}
@@ -330,7 +331,7 @@ function LockScreen({appLock,onUnlock}){
  }
  return <div className="app" style={{display:'block'}}>
   <div className="lockWrap">
-   <div className="lockIcon">🔒</div>
+   <div className="lockIcon"><Lock size={40} strokeWidth={1.6}/></div>
    <h1>Locked</h1>
    <p className="hint">Enter your PIN to continue</p>
    <form onSubmit={tryPin}>
@@ -442,9 +443,9 @@ function CategoryManager({cats,setCats,expenses}){
   <div className="toolbar">
    <input value={name} onChange={e=>setName(e.target.value)} placeholder="New category name"/>
    <div className="iconPicker">{CATEGORY_ICON_CHOICES.map(em=><button type="button" key={em} className={'avatarChip small'+(icon===em?' selected':'')} onClick={()=>setIcon(em)}>{em}</button>)}</div>
-   <button className="primary" onClick={add}>＋ Add category</button>
+   <button className="primary btnRow" onClick={add}><Plus size={16}/> Add category</button>
   </div>
-  <div className="catGrid">{cats.map(c=><div className="cat" key={c.id}><span>{c.icon}</span><b>{c.name}</b>{c.id.startsWith('custom-')&&<button className="mini danger" style={{marginLeft:'auto'}} onClick={()=>removeCat(c.id)}>✕</button>}</div>)}</div>
+  <div className="catGrid">{cats.map(c=><div className="cat" key={c.id}><span>{c.icon}</span><b>{c.name}</b>{c.id.startsWith('custom-')&&<button className="mini danger iconBtn" style={{marginLeft:'auto'}} onClick={()=>removeCat(c.id)}><X size={14}/></button>}</div>)}</div>
  </Panel>
 }
 const CATEGORY_ICON_CHOICES=['🏷️','🍽️','🚕','🏋️','🎮','📚','🧾','🐾','🎁','✈️','🧹','🔧'];
@@ -512,7 +513,7 @@ function CalendarView({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  return <div className="calendar">
   <div className="panelHead">
    <h2 style={{fontSize:14}}>{monthNames[month]} {year}</h2>
-   <div className="navBtns"><button onClick={onPrev}>‹</button><button onClick={onNext}>›</button></div>
+   <div className="navBtns"><button onClick={onPrev}><ChevronLeft size={16}/></button><button onClick={onNext}><ChevronRight size={16}/></button></div>
   </div>
   <div className="calGrid">
    {weekdayLabels.map(w=><div className="calDow" key={w}>{w}</div>)}

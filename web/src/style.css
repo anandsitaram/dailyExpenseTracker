@@ -145,7 +145,6 @@ header p{margin:0;color:var(--muted)}
  .brand span,.nav button:not(.active)::after,.sideCard{display:none}
  .brand{font-size:0}
  .nav button{justify-content:center;font-size:0}
- .nav button b{font-size:18px}
  main{margin-left:70px;padding:24px}
  .cards{grid-template-columns:1fr 1fr}
  .grid{grid-template-columns:1fr}
@@ -182,7 +181,9 @@ header p{margin:0;color:var(--muted)}
 
 /* app lock screen */
 .lockWrap{max-width:340px;margin:15vh auto 0;text-align:center;padding:20px}
-.lockIcon{font-size:44px;margin-bottom:6px}
+.lockIcon{display:flex;justify-content:center;margin-bottom:6px;color:var(--ink)}
+.btnRow{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.iconBtn{display:inline-flex;align-items:center;justify-content:center;padding:6px}
 .lockWrap form{display:flex;flex-direction:column;align-items:center;margin-top:10px}
 .pinInput{width:180px;text-align:center;font-size:22px;letter-spacing:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card)}
 

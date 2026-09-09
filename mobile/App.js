@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useState,useRef} from 'react';
 import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert,AppState} from 'react-native';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
@@ -7,6 +7,7 @@ import {secureGetItem,secureSetItem} from './secureStorage';
 import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
 import {isBiometrySupported,enableBiometricUnlock,disableBiometricUnlock,verifyBiometricUnlock} from './appLock';
 import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses} from './shared';
+import {Home,ListChecks,Plus,PieChart,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock} from 'lucide-react-native';
 
 const today=()=>new Date().toISOString().slice(0,10);
 const CATEGORY_ICON_CHOICES=['🏷️','🍽️','🚕','🏋️','🎮','📚','🧾','🐾','🎁','✈️','🧹','🔧'];
@@ -26,6 +27,20 @@ export default function App(){
  const [restoreText,setRestoreText]=useState(''),[backupPassword,setBackupPassword]=useState(''),[restorePassword,setRestorePassword]=useState('');
  const now=new Date();
  const [calYear,setCalYear]=useState(now.getFullYear()),[calMonth,setCalMonth]=useState(now.getMonth());
+
+ // --- undo-on-delete snackbar (replaces an irreversible confirm dialog) ---
+ const [undoState,setUndoState]=useState(null); // {item,index}
+ const undoTimer=useRef(null);
+ function flashUndo(item,index){
+  clearTimeout(undoTimer.current);
+  setUndoState({item,index});
+  undoTimer.current=setTimeout(()=>setUndoState(null),6000);
+ }
+ function undoDelete(){
+  if(!undoState)return;
+  setExpenses(prev=>{const n=prev.slice();n.splice(undoState.index,0,undoState.item);return n});
+  clearTimeout(undoTimer.current);setUndoState(null);
+ }
 
  // --- app lock (session-only; never persisted, so every cold start requires unlocking again) ---
  const [unlocked,setUnlocked]=useState(false);
@@ -104,7 +119,12 @@ export default function App(){
   resetForm();setTab('expenses')
  }
  function removeExpense(id){
-  Alert.alert('Delete expense','This cannot be undone.',[{text:'Cancel',style:'cancel'},{text:'Delete',style:'destructive',onPress:()=>setExpenses(expenses.filter(e=>e.id!==id))}])
+  setExpenses(prev=>{
+   const index=prev.findIndex(e=>e.id===id);
+   if(index===-1)return prev;
+   flashUndo(prev[index],index);
+   return prev.filter(e=>e.id!==id);
+  });
  }
  function addCategory(){
   if(!newCat.trim())return;
@@ -202,10 +222,10 @@ export default function App(){
   setAppLock(defaultAppLock);setUnlocked(true);
  }
 
- const Nav=()=><View style={s.nav}>{[['home','⌂','Home'],['expenses','☷','Expenses'],['add','＋','Add'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
-  <TouchableOpacity key={x[0]} onPress={()=>x[0]==='add'?startAdd():setTab(x[0])} style={s.navItem}>
-   <Text style={[s.navIcon,tab===x[0]&&s.navActive]} maxFontSizeMultiplier={1.3} allowFontScaling={false}>{x[1]}</Text>
-   <Text style={tab===x[0]?s.navTextActive:s.navText} maxFontSizeMultiplier={1.3} numberOfLines={1}>{x[2]}</Text>
+ const Nav=()=><View style={s.nav}>{[['home',Home,'Home'],['expenses',ListChecks,'Expenses'],['add',Plus,'Add'],['analytics',PieChart,'Analytics'],['budget',Target,'Budget'],['categories',Tags,'Categories'],['profile',User,'Profile']].map(([key,Icon,label])=>
+  <TouchableOpacity key={key} onPress={()=>key==='add'?startAdd():setTab(key)} style={s.navItem}>
+   <Icon size={19} color={tab===key?DARK:'#5b645b'} strokeWidth={tab===key?2.3:2}/>
+   <Text style={tab===key?s.navTextActive:s.navText} maxFontSizeMultiplier={1.3} numberOfLines={1}>{label}</Text>
   </TouchableOpacity>)}
  </View>;
 
@@ -256,7 +276,7 @@ export default function App(){
      <View style={{flex:1}}><Text style={s.smallLabel}>To (YYYY-MM-DD)</Text><TextInput style={s.input} value={dateTo} onChangeText={setDateTo} placeholder="2026-09-30"/></View>
     </View>}
     {dateFilterActive&&<TouchableOpacity onPress={()=>{setDateFrom('');setDateTo('')}}><Text style={s.danger}>Clear date filter</Text></TouchableOpacity>}
-    {singleDaySelected&&<TouchableOpacity style={s.secondary} onPress={()=>startAdd(singleDaySelected)}><Text style={s.secondaryText}>＋ Add expense for {singleDaySelected}</Text></TouchableOpacity>}
+    {singleDaySelected&&<TouchableOpacity style={[s.secondary,s.btnRow]} onPress={()=>startAdd(singleDaySelected)}><Plus size={16} color="#33500f"/><Text style={s.secondaryText}>Add expense for {singleDaySelected}</Text></TouchableOpacity>}
     {expenses.length>0&&<TouchableOpacity style={s.secondary} onPress={exportExcel}><Text style={s.secondaryText}>Export to Excel</Text></TouchableOpacity>}
     {visibleExpenses.map(e=><Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense}/>)}
     {!visibleExpenses.length&&(expenses.length?
@@ -354,9 +374,9 @@ export default function App(){
     <View style={s.catGrid}>
      {CATEGORY_ICON_CHOICES.map(em=><TouchableOpacity key={em} onPress={()=>setNewCatIcon(em)} style={[s.chip,newCatIcon===em&&s.selected]}><Text style={{fontSize:18}}>{em}</Text></TouchableOpacity>)}
     </View>
-    <TouchableOpacity style={s.primary} onPress={addCategory}><Text style={s.primaryText}>＋ Add category</Text></TouchableOpacity>
+    <TouchableOpacity style={[s.primary,s.btnRow]} onPress={addCategory}><Plus size={17} color="#fff"/><Text style={s.primaryText}>Add category</Text></TouchableOpacity>
     <Text style={[s.label,{marginTop:18}]}>Your categories</Text>
-    <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text style={s.chipText}>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)}><Text style={s.danger}> ✕</Text></TouchableOpacity>}</View>)}</View>
+    <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text style={s.chipText}>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)} style={{marginLeft:2}}><X size={14} color="#b23b3b"/></TouchableOpacity>}</View>)}</View>
    </Section>}
 
    {tab==='profile'&&<>
@@ -400,15 +420,19 @@ export default function App(){
      <Text style={[s.label,{marginTop:14}]}>Backup password</Text>
      <TextInput style={s.input} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} placeholder="At least 4 characters"/>
      <Text style={s.hint}>Your backup file is encrypted with this password. Daily Expense Tracker never stores it anywhere, so if you forget it, the backup can&apos;t be recovered - keep it somewhere safe.</Text>
-     <TouchableOpacity style={[s.secondary,{marginTop:14}]} onPress={exportBackup}><Text style={s.secondaryText}>⬇ Export backup</Text></TouchableOpacity>
+     <TouchableOpacity style={[s.secondary,s.btnRow,{marginTop:14}]} onPress={exportBackup}><Download size={16} color="#33500f"/><Text style={s.secondaryText}>Export backup</Text></TouchableOpacity>
      <Text style={[s.label,{marginTop:10}]}>Restore from backup</Text>
      <Text style={s.hint}>Open your backup file, copy all of its text, and paste it below.</Text>
      <TextInput style={[s.input,s.multiline]} multiline value={restoreText} onChangeText={setRestoreText} placeholder="Paste backup JSON here"/>
      <TextInput style={s.input} secureTextEntry value={restorePassword} onChangeText={setRestorePassword} placeholder="Backup password (if encrypted)"/>
-     <TouchableOpacity style={s.primary} onPress={restoreBackup}><Text style={s.primaryText}>Restore backup</Text></TouchableOpacity>
+     <TouchableOpacity style={[s.primary,s.btnRow]} onPress={restoreBackup}><Upload size={16} color="#fff"/><Text style={s.primaryText}>Restore backup</Text></TouchableOpacity>
     </Section>
    </>}
   </ScrollView>
+  {undoState&&<View style={s.snackbar}>
+   <Text style={s.snackbarText}>Expense deleted</Text>
+   <TouchableOpacity onPress={undoDelete}><Text style={s.snackbarAction}>Undo</Text></TouchableOpacity>
+  </View>}
   <Nav/>
  </SafeAreaView>
 }
@@ -429,7 +453,7 @@ function LockScreen({appLock,onUnlock}){
  }
  return <SafeAreaView style={s.safe}>
   <View style={s.lockWrap}>
-   <Text style={s.lockIcon}>🔒</Text>
+   <Lock size={40} color={DARK} strokeWidth={1.6} style={{marginBottom:6}}/>
    <Text style={s.title}>Locked</Text>
    <Text style={s.muted}>{usePin?'Enter your PIN to continue':'Unlock with Face ID / fingerprint'}</Text>
    {usePin?<>
@@ -499,7 +523,7 @@ function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  return <View>
   <View style={s.rowTop}>
    <Text style={s.bold}>{monthNames[month]} {year}</Text>
-   <View style={{flexDirection:'row',gap:14}}><TouchableOpacity onPress={onPrev}><Text style={s.navArrow}>‹</Text></TouchableOpacity><TouchableOpacity onPress={onNext}><Text style={s.navArrow}>›</Text></TouchableOpacity></View>
+   <View style={{flexDirection:'row',gap:14}}><TouchableOpacity onPress={onPrev} style={s.calNavBtn}><ChevronLeft size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity><TouchableOpacity onPress={onNext} style={s.calNavBtn}><ChevronRight size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity></View>
   </View>
   <View style={s.calRow}>{weekdayLabels.map(w=><Text style={s.calDow} key={w}>{w}</Text>)}</View>
   <View style={s.calGrid}>
@@ -566,6 +590,7 @@ const s=StyleSheet.create({
  chipText:{color:DARK,fontSize:14},
  selected:{borderWidth:2,borderColor:DARK,backgroundColor:GREEN_TINT},
  primary:{backgroundColor:DARK,padding:16,borderRadius:12,alignItems:'center',marginTop:18},
+ btnRow:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},
  primaryText:{color:'#fff',fontWeight:'bold',fontSize:15},
  secondary:{backgroundColor:GREEN_TINT,padding:13,borderRadius:12,alignItems:'center',marginTop:12,marginBottom:10,borderWidth:1,borderColor:'#cfe3b3'},
  secondaryText:{color:'#33500f',fontWeight:'bold'},
@@ -596,13 +621,13 @@ const s=StyleSheet.create({
  calAmt:{fontSize:8,fontWeight:'bold',color:'#3d6b12'},
  calSelected:{borderTopWidth:1,borderTopColor:BORDER,paddingTop:10,marginTop:6},
  nav:{position:'absolute',bottom:0,left:0,right:0,minHeight:74,backgroundColor:'#fff',borderTopWidth:1.5,borderTopColor:BORDER,flexDirection:'row',alignItems:'center',paddingHorizontal:2,paddingVertical:2},
- navItem:{flex:1,alignItems:'center',justifyContent:'center',paddingTop:6,paddingBottom:6},
- navIcon:{fontSize:19,color:'#5b645b'},
+ navItem:{flex:1,alignItems:'center',justifyContent:'center',paddingTop:6,paddingBottom:6,gap:3},
  navText:{fontSize:9,color:'#5b645b',fontWeight:'600',textAlign:'center',includeFontPadding:false},
- navActive:{color:DARK},
  navTextActive:{fontSize:9,fontWeight:'bold',color:DARK,textAlign:'center',includeFontPadding:false},
- navArrow:{fontSize:18,fontWeight:'bold',color:DARK,paddingHorizontal:6},
+ calNavBtn:{padding:4},
  lockWrap:{flex:1,alignItems:'center',justifyContent:'center',padding:30,gap:6},
- lockIcon:{fontSize:44,marginBottom:6},
- pinInput:{width:160,textAlign:'center',fontSize:22,letterSpacing:8,marginTop:20,marginBottom:6}
+ pinInput:{width:160,textAlign:'center',fontSize:22,letterSpacing:8,marginTop:20,marginBottom:6},
+ snackbar:{position:'absolute',left:16,right:16,bottom:88,backgroundColor:DARK,borderRadius:12,paddingVertical:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',shadowColor:'#000',shadowOpacity:0.25,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:6},
+ snackbarText:{color:'#fff',fontSize:14},
+ snackbarAction:{color:GREEN,fontWeight:'bold',fontSize:14}
 });

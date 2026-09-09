@@ -80,8 +80,6 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 **Web:** Dashboard · Expenses · Add/Edit Expense · Analytics · Budget · Categories · Profile
 
 **Mobile:** Home · Expenses · Add · Analytics · Budget · Categories · Profile
-
-
 ## 🖥️ Run the web app
 
 Requirements: Node.js 18+
@@ -117,5 +115,3 @@ This app is intentionally backend-free — there is no server, no database, and 
 - **Mobile** → data is encrypted with a key stored in the device's Keychain (iOS) or Keystore (Android), ciphertext kept in `AsyncStorage`
 
 Because nothing is stored anywhere else, an app reinstall, a browser data reset, or a new device will not carry your data forward automatically — use the built-in **Backup & Restore** feature to export a backup first and restore it afterward. Backup files are separately encrypted with a password you choose (PBKDF2 + AES), independent of the at-rest encryption above, since a backup file is meant to leave the device. See [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) for the full policy.
-
-
