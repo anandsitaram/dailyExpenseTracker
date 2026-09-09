@@ -27,6 +27,8 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 
 ### Budgeting that keeps you honest
 - Set a monthly budget and track spending against it in real time
+- Per-category budgets too, not just one overall number
+- Recurring expenses — rent, EMIs, subscriptions — set once (daily/weekly/monthly) and they log themselves automatically, catching up on anything due since you last opened the app
 - Visual progress bar with percentage of budget used
 - Clear "remaining balance" figure at all times
 - Automatic warning once spending crosses 80% of budget
@@ -39,7 +41,8 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 
 ### Categories that fit your life
 - Sensible built-in categories: Food, Groceries, Home, Transport, Fuel, Medical, Bills, Education, Shopping, Entertainment, Travel, Investment, Gifts, and more
-- Add your own custom categories for anything not covered
+- Add your own custom categories, with a choice of icon, for anything not covered
+- A clear warning before deleting a category that's still used by past expenses, so you're never surprised
 - Track income (e.g. Salary) alongside expenses to see the full picture
 
 ### A profile that feels like yours
@@ -49,20 +52,28 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 
 ### Export and backup, on your terms
 - Export your full expense history to Excel or CSV for record-keeping, tax filing, or sharing with family
-- One-tap full data backup (expenses, categories, budget, and profile) to a portable file
+- One-tap full data backup (expenses, categories, budgets, recurring expenses, and profile) to a portable file
+- Backups are **password-encrypted** before they ever touch disk — safe to save to a shared Drive folder, email to yourself, or keep on a USB drive
 - Restore your data from a backup at any time — essential when reinstalling the app or moving to a new phone, since this app deliberately keeps no server-side copy of your data
 - Full transparency in-app about what backup covers and why it matters
+
+### Security
+- Optional app-open lock — PIN on both platforms, plus Face ID / fingerprint on mobile
+- Automatically re-locks when the app is backgrounded (mobile) or the tab is hidden (web), not just on cold start
+- Deleting an expense shows an "Undo" option for a few seconds instead of only an irreversible confirmation
 
 ### Private by design
 - No account, no sign-up, no login, no ads
 - All data lives only on your own device — nothing is sent to a server
 - Data is **encrypted at rest**: mobile uses the device's secure Keychain/Keystore to protect a locally generated key, and web uses a non-extractable key stored in the browser to encrypt everything before it touches disk
 - Because there's no cloud account behind it, you are always in full control of your own financial data — and also in charge of backing it up
+- See [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) for the full policy
 
 ### Works the way you do
 - One shared codebase for consistent behavior between the web app and the native mobile app (Android and iOS)
 - Clean bottom/side navigation with dedicated Home, Expenses, Add, Analytics, Budget, Categories, and Profile screens
 - Empty states and hints throughout that guide you toward entering real data, instead of showing confusing sample numbers
+- Light and dark appearance (web)
 
 ## 🧭 Application screens
 
@@ -78,28 +89,41 @@ dailyExpenseTracker/
 │   ├── App.js
 │   ├── shared.js
 │   ├── secureStorage.js
+│   ├── backupCrypto.js
+│   ├── appLock.js
+│   ├── __tests__/
+│   │   └── shared.test.js
 │   ├── android/
 │   ├── ios/
 │   └── package.json
 │
 ├── web/
-│   ├── src/
-│   │   ├── main.jsx
-│   │   ├── shared.js
-│   │   ├── secureStorage.js
-│   │   └── style.css
-│   ├── index.html
-│   └── package.json
+│   └── src/
+│       ├── main.jsx
+│       ├── shared.js
+│       ├── secureStorage.js
+│       ├── backupCrypto.js
+│       ├── style.css
+│       └── __tests__/
+│           └── shared.test.js
 │
+├── e2e/
+│   └── smoke.spec.js
+├── docs/
+│   └── PRIVACY_POLICY.md
+├── .github/workflows/ci.yml
+├── playwright.config.js
+├── index.html
+├── package.json          # also runs the web app — see note below
 └── README.md
 ```
+> **Note:** the web app's `package.json` lives at the **repository root**, not inside `web/` — always run web commands (`npm install`, `npm run dev`, `npm test`) from the repo root. The mobile app has its own separate `package.json` inside `mobile/`.
 
 ## 🖥️ Run the web app
 
 Requirements: Node.js 18+
 
 ```bash
-cd web
 npm install
 npm run dev
 ```
@@ -122,6 +146,20 @@ npx react-native run-ios
 npx react-native run-android
 ```
 
+## ✅ Testing
+
+Unit tests cover the shared logic (calendar math, recurring-expense generation, backup parsing, PIN validation) and run on both platforms:
+
+```bash
+# Web (Vitest) — from the repo root
+npm test
+
+# Mobile (Jest) — from mobile/
+cd mobile && npm test
+```
+
+A Playwright end-to-end smoke test (`e2e/smoke.spec.js`) covers the empty-state dashboard, adding an expense, the calendar → Add-expense flow, and the app-lock PIN flow. Run it with `npx playwright install --with-deps chromium && npx playwright test` from the repo root. All of the above run automatically on every push via GitHub Actions (`.github/workflows/ci.yml`). A Detox-based E2E suite for the native mobile app is a planned addition, not yet included.
+
 ## 🔒 Storage & privacy
 
 This app is intentionally backend-free — there is no server, no database, and no account behind it. Everything you enter stays encrypted on your own device:
@@ -129,6 +167,14 @@ This app is intentionally backend-free — there is no server, no database, and 
 - **Web** → data is encrypted with a non-extractable key stored in the browser, ciphertext kept in `localStorage`
 - **Mobile** → data is encrypted with a key stored in the device's Keychain (iOS) or Keystore (Android), ciphertext kept in `AsyncStorage`
 
-Because nothing is stored anywhere else, an app reinstall, a browser data reset, or a new device will not carry your data forward automatically — use the built-in **Backup & Restore** feature to export a backup first and restore it afterward.
+Because nothing is stored anywhere else, an app reinstall, a browser data reset, or a new device will not carry your data forward automatically — use the built-in **Backup & Restore** feature to export a backup first and restore it afterward. Backup files are separately encrypted with a password you choose (PBKDF2 + AES), independent of the at-rest encryption above, since a backup file is meant to leave the device. See [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) for the full policy.
 
+## 💳 A note on "payment method"
 
+There is no real payment processing in this app. "Payment method" simply records *how* you paid for something you already spent money on — Cash, UPI, Credit Card, Debit Card, or Bank Transfer — purely for your own tracking.
+
+## 🎯 The goal
+
+Not just to record numbers, but to answer the question that matters every single day:
+
+> **"Where is my money going, and what can I do about it — today, not just at month-end?"**

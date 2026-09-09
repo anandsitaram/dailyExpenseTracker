@@ -1,38 +1,64 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert} from 'react-native';
+import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert,AppState} from 'react-native';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import * as XLSX from 'xlsx';
 import {secureGetItem,secureSetItem} from './secureStorage';
-import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload} from './shared';
+import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
+import {isBiometrySupported,enableBiometricUnlock,disableBiometricUnlock,verifyBiometricUnlock} from './appLock';
+import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses} from './shared';
 
 const today=()=>new Date().toISOString().slice(0,10);
+const CATEGORY_ICON_CHOICES=['🏷️','🍽️','🚕','🏋️','🎮','📚','🧾','🐾','🎁','✈️','🧹','🔧'];
 
 export default function App(){
  const [expenses,setExpenses]=useState([]),[cats,setCats]=useState(defaultCategories),[budget,setBudget]=useState(0),[loaded,setLoaded]=useState(false);
  const [profile,setProfile]=useState(defaultProfile);
+ const [recurring,setRecurring]=useState([]);
+ const [categoryBudgets,setCategoryBudgets]=useState({});
+ const [appLock,setAppLock]=useState(defaultAppLock);
  const [tab,setTab]=useState('home');
  const [editingId,setEditingId]=useState(null);
- const [amount,setAmount]=useState(''),[desc,setDesc]=useState(''),[category,setCategory]=useState('food'),[method,setMethod]=useState('UPI'),[date,setDate]=useState(today()),[note,setNote]=useState('');
- const [newCat,setNewCat]=useState('');
+ const [amount,setAmount]=useState(''),[desc,setDesc]=useState(''),[category,setCategory]=useState('food'),[method,setMethod]=useState('UPI'),[date,setDate]=useState(today()),[note,setNote]=useState(''),[repeat,setRepeat]=useState('none');
+ const [newCat,setNewCat]=useState(''),[newCatIcon,setNewCatIcon]=useState(CATEGORY_ICON_CHOICES[0]);
  const [search,setSearch]=useState('');
  const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState(''),[showDateFilter,setShowDateFilter]=useState(false);
- const [restoreText,setRestoreText]=useState('');
+ const [restoreText,setRestoreText]=useState(''),[backupPassword,setBackupPassword]=useState(''),[restorePassword,setRestorePassword]=useState('');
  const now=new Date();
  const [calYear,setCalYear]=useState(now.getFullYear()),[calMonth,setCalMonth]=useState(now.getMonth());
+
+ // --- app lock (session-only; never persisted, so every cold start requires unlocking again) ---
+ const [unlocked,setUnlocked]=useState(false);
+ const [biometrySupported,setBiometrySupported]=useState(false);
+ useEffect(()=>{isBiometrySupported().then(setBiometrySupported)},[]);
+ // Re-lock whenever the app is backgrounded, not just on cold start - otherwise "lock on open"
+ // barely matters since Android/iOS keep the process alive for days between real cold starts.
+ useEffect(()=>{
+  const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&appLock.enabled)setUnlocked(false)});
+  return()=>sub.remove();
+ },[appLock.enabled]);
 
  useEffect(()=>{(async()=>{
   let e=await secureGetItem('expenses',emptyExpenses);
   let c=await secureGetItem('categories',defaultCategories);
   let b=Number(await secureGetItem('budget',0));
   let p=await secureGetItem('profile',defaultProfile);
-  setExpenses(e);setCats(c);setBudget(b);setProfile({...defaultProfile,...p});setLoaded(true)
+  let r=await secureGetItem('recurring',[]);
+  let cb=await secureGetItem('categoryBudgets',{});
+  let al=await secureGetItem('appLock',defaultAppLock);
+  // Catch up any recurring expenses that came due while the app was closed.
+  const {newExpenses,updatedTemplates}=generateDueExpenses(r,e,today());
+  if(newExpenses.length)e=[...newExpenses,...e];
+  setExpenses(e);setCats(c);setBudget(b);setProfile({...defaultProfile,...p});setRecurring(updatedTemplates);setCategoryBudgets(cb);setAppLock({...defaultAppLock,...al});setLoaded(true)
  })()},[]);
  // guarded by `loaded` so we never overwrite storage with the initial empty state before load finishes
  useEffect(()=>{if(loaded)secureSetItem('expenses',expenses).catch(console.error)},[expenses,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('categories',cats).catch(console.error)},[cats,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('budget',budget).catch(console.error)},[budget,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('profile',profile).catch(console.error)},[profile,loaded]);
+ useEffect(()=>{if(loaded)secureSetItem('recurring',recurring).catch(console.error)},[recurring,loaded]);
+ useEffect(()=>{if(loaded)secureSetItem('categoryBudgets',categoryBudgets).catch(console.error)},[categoryBudgets,loaded]);
+ useEffect(()=>{if(loaded)secureSetItem('appLock',appLock).catch(console.error)},[appLock,loaded]);
 
  const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7)));
  const monthExpenseItems=month.filter(e=>!isIncomeCategory(cats,e.category));
@@ -52,9 +78,11 @@ export default function App(){
  // Shown under the Add-expense form so tapping a calendar date still gives visibility
  // into what's already logged that day, without a detour through the Expenses tab.
  const sameDayExpenses=useMemo(()=>expenses.filter(e=>e.date===date&&e.id!==editingId).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,date,editingId]);
+ // Per-category spend this month, for the category-budget progress bars in the Budget tab.
+ const categorySpend=useMemo(()=>{const m={};monthExpenseItems.forEach(e=>{m[e.category]=(m[e.category]||0)+Number(e.amount)});return m},[monthExpenseItems]);
 
- function resetForm(presetDate){setEditingId(null);setAmount('');setDesc('');setCategory(cats.find(c=>!c.income)?.id||cats[0]?.id||'food');setMethod('UPI');setDate(presetDate||today());setNote('')}
- function startEdit(e){setEditingId(e.id);setAmount(String(e.amount));setDesc(e.description||'');setCategory(e.category);setMethod(e.paymentMethod);setDate(e.date);setNote(e.note||'');setTab('add')}
+ function resetForm(presetDate){setEditingId(null);setAmount('');setDesc('');setCategory(cats.find(c=>!c.income)?.id||cats[0]?.id||'food');setMethod('UPI');setDate(presetDate||today());setNote('');setRepeat('none')}
+ function startEdit(e){setEditingId(e.id);setAmount(String(e.amount));setDesc(e.description||'');setCategory(e.category);setMethod(e.paymentMethod);setDate(e.date);setNote(e.note||'');setRepeat('none');setTab('add')}
  function startAdd(presetDate){resetForm(presetDate);setTab('add')}
  // Tapping a day on the dashboard calendar goes straight to Add expense (preset to that date)
  // instead of routing through the Expenses tab.
@@ -63,6 +91,13 @@ export default function App(){
   if(!Number(amount))return Alert.alert('Enter amount');
   if(editingId){
    setExpenses(expenses.map(e=>e.id===editingId?{...e,amount:Number(amount),description:desc||cats.find(c=>c.id===category)?.name,date,category,paymentMethod:method,note}:e))
+  }else if(repeat!=='none'){
+   // Create a recurring template and immediately generate any occurrences due up to today
+   // (covers the case where the chosen start date is in the past).
+   const template={id:'r-'+Date.now(),amount:Number(amount),description:desc||cats.find(c=>c.id===category)?.name,category,paymentMethod:method,note,frequency:repeat,startDate:date,active:true,lastGeneratedDate:null};
+   const {newExpenses,updatedTemplates}=generateDueExpenses([template],expenses,today());
+   setRecurring([...recurring,...updatedTemplates]);
+   setExpenses([...newExpenses,...expenses]);
   }else{
    setExpenses([{id:Date.now().toString(),amount:Number(amount),description:desc||cats.find(c=>c.id===category)?.name,date,category,paymentMethod:method,note},...expenses])
   }
@@ -73,9 +108,28 @@ export default function App(){
  }
  function addCategory(){
   if(!newCat.trim())return;
-  setCats([...cats,{id:'custom-'+Date.now(),name:newCat.trim(),icon:'🏷️'}]);setNewCat('')
+  setCats([...cats,{id:'custom-'+Date.now(),name:newCat.trim(),icon:newCatIcon}]);setNewCat('');setNewCatIcon(CATEGORY_ICON_CHOICES[0])
  }
- function removeCategory(id){setCats(cats.filter(c=>c.id!==id))}
+ function removeCategory(id){
+  const count=expenses.filter(e=>e.category===id).length;
+  const proceed=()=>{setCats(cats.filter(c=>c.id!==id));setCategoryBudgets(b=>{const n={...b};delete n[id];return n})};
+  if(count>0){
+   Alert.alert('Delete this category?',`This category is used by ${count} expense${count===1?'':'s'}. Deleting it won't delete those expenses, but they'll show as "Uncategorized".`,[
+    {text:'Cancel',style:'cancel'},
+    {text:'Delete',style:'destructive',onPress:proceed}
+   ]);
+  }else{
+   proceed();
+  }
+ }
+ function toggleRecurring(id){setRecurring(recurring.map(t=>t.id===id?{...t,active:!t.active}:t))}
+ function deleteRecurring(id){
+  Alert.alert('Delete recurring expense','Past expenses it already created will stay - this only stops future ones.',[
+   {text:'Cancel',style:'cancel'},
+   {text:'Delete',style:'destructive',onPress:()=>setRecurring(recurring.filter(t=>t.id!==id))}
+  ])
+ }
+ function setCategoryBudget(id,value){setCategoryBudgets({...categoryBudgets,[id]:Number(value)||0})}
  async function exportExcel(){
   const rows=toExpenseRows(expenses,cats);
   const ws=XLSX.utils.json_to_sheet(rows);
@@ -95,12 +149,15 @@ export default function App(){
    Alert.alert('Saved to',path);
   }
  }
- // Full data backup - this app is fully offline with no account or server, so this file is the
- // only thing that can carry your data across an uninstall/reinstall or a new phone.
+ // Full data backup, password-encrypted before it ever touches disk - this app is fully
+ // offline with no account or server, so this file is the only thing that can carry your
+ // data across an uninstall/reinstall or a new phone.
  async function exportBackup(){
-  const payload=buildBackupPayload({expenses,categories:cats,budget,profile});
+  if(backupPassword.length<4)return Alert.alert('Set a backup password','Enter a password with at least 4 characters. You will need it again to restore this backup.');
+  const plain=buildBackupPayload({expenses,categories:cats,budget,profile});
+  const envelope=encryptBackupPayload(plain,backupPassword);
   const path=RNFS.DocumentDirectoryPath+'/daily-expense-backup.json';
-  await RNFS.writeFile(path,payload,'utf8');
+  await RNFS.writeFile(path,envelope,'utf8');
   try{
    await Share.open({url:'file://'+path,type:'application/json',title:'Save your backup',failOnCancel:false});
   }catch(e){
@@ -109,26 +166,54 @@ export default function App(){
  }
  function restoreBackup(){
   if(!restoreText.trim())return Alert.alert('Paste your backup first','Open your saved backup file, copy all of its text, then paste it here.');
+  let plainText=restoreText;
+  if(isEncryptedBackupText(restoreText)){
+   if(!restorePassword)return Alert.alert('Enter the backup password','This backup is encrypted - enter the password you used when you exported it.');
+   try{plainText=decryptBackupPayload(restoreText,restorePassword)}catch(e){return Alert.alert('Wrong password','That password doesn\u2019t match this backup. Please try again.')}
+  }
   let data;
-  try{data=parseBackupPayload(restoreText)}catch(e){return Alert.alert("That doesn't look like a valid backup","Please check you copied the whole file and try again.")}
+  try{data=parseBackupPayload(plainText)}catch(e){return Alert.alert("That doesn't look like a valid backup","Please check you copied the whole file and try again.")}
   Alert.alert('Restore this backup?','This replaces everything currently in the app with the backup data. This cannot be undone.',[
    {text:'Cancel',style:'cancel'},
    {text:'Restore',style:'destructive',onPress:()=>{
     setExpenses(data.expenses);setCats(data.categories.length?data.categories:defaultCategories);setBudget(data.budget);setProfile(data.profile);
-    setRestoreText('');
+    setRestoreText('');setRestorePassword('');
     Alert.alert('Restored','Your data has been restored from the backup.')
    }}
   ])
  }
 
+ // --- app lock setup (Profile tab) ---
+ const [pinDraft,setPinDraft]=useState(''),[pinConfirm,setPinConfirm]=useState(''),[showPinSetup,setShowPinSetup]=useState(false);
+ async function savePin(){
+  if(!isValidPin(pinDraft))return Alert.alert('Use a 4-6 digit PIN');
+  if(pinDraft!==pinConfirm)return Alert.alert("PINs don't match");
+  const useBiometric=biometrySupported&&appLock.mode==='biometric';
+  if(useBiometric)await enableBiometricUnlock();
+  setAppLock({enabled:true,mode:useBiometric?'biometric':'pin',pin:pinDraft});
+  setPinDraft('');setPinConfirm('');setShowPinSetup(false);
+ }
+ async function toggleBiometricMode(on){
+  if(on){await enableBiometricUnlock();setAppLock({...appLock,mode:'biometric'})}
+  else{await disableBiometricUnlock();setAppLock({...appLock,mode:'pin'})}
+ }
+ async function turnOffLock(){
+  await disableBiometricUnlock();
+  setAppLock(defaultAppLock);setUnlocked(true);
+ }
+
  const Nav=()=><View style={s.nav}>{[['home','⌂','Home'],['expenses','☷','Expenses'],['add','＋','Add'],['analytics','◔','Analytics'],['budget','◎','Budget'],['categories','◇','Categories'],['profile','☺','Profile']].map(x=>
   <TouchableOpacity key={x[0]} onPress={()=>x[0]==='add'?startAdd():setTab(x[0])} style={s.navItem}>
-   <Text style={[s.navIcon,tab===x[0]&&s.navActive]}>{x[1]}</Text>
-   <Text style={tab===x[0]?s.navTextActive:s.navText}>{x[2]}</Text>
+   <Text style={[s.navIcon,tab===x[0]&&s.navActive]} maxFontSizeMultiplier={1.3} allowFontScaling={false}>{x[1]}</Text>
+   <Text style={tab===x[0]?s.navTextActive:s.navText} maxFontSizeMultiplier={1.3} numberOfLines={1}>{x[2]}</Text>
   </TouchableOpacity>)}
  </View>;
 
  if(!loaded)return <SafeAreaView style={s.safe}><View style={s.loadingWrap}><Text style={s.muted}>Loading your data…</Text></View></SafeAreaView>;
+
+ if(appLock.enabled&&!unlocked){
+  return <LockScreen appLock={appLock} onUnlock={()=>setUnlocked(true)}/>;
+ }
 
  return <SafeAreaView style={s.safe}>
   <ScrollView contentContainerStyle={s.container}>
@@ -191,9 +276,16 @@ export default function App(){
      <ScrollView horizontal showsHorizontalScrollIndicator={false}>{paymentMethods.map(x=><TouchableOpacity key={x} onPress={()=>setMethod(x)} style={[s.chip,method===x&&s.selected]}><Text style={s.chipText}>{x}</Text></TouchableOpacity>)}</ScrollView>
      <Text style={s.label}>Date (YYYY-MM-DD)</Text>
      <TextInput style={s.input} value={date} onChangeText={setDate}/>
+     {!editingId&&<>
+      <Text style={s.label}>Repeat</Text>
+      <View style={{flexDirection:'row',flexWrap:'wrap'}}>
+       {['none',...recurringFrequencies].map(f=><TouchableOpacity key={f} onPress={()=>setRepeat(f)} style={[s.chip,repeat===f&&s.selected]}><Text style={s.chipText}>{f==='none'?'One-time':frequencyLabels[f]}</Text></TouchableOpacity>)}
+      </View>
+      {repeat!=='none'&&<Text style={s.hint}>This will create a recurring {frequencyLabels[repeat].toLowerCase()} expense starting {date}, and catch up on any occurrences automatically whenever you open the app.</Text>}
+     </>}
      <Text style={s.label}>Notes</Text>
      <TextInput style={s.input} value={note} onChangeText={setNote} placeholder="Optional note"/>
-     <TouchableOpacity style={s.primary} onPress={save}><Text style={s.primaryText}>{editingId?'Save changes':'Add expense'}</Text></TouchableOpacity>
+     <TouchableOpacity style={s.primary} onPress={save}><Text style={s.primaryText}>{editingId?'Save changes':repeat!=='none'?'Add recurring expense':'Add expense'}</Text></TouchableOpacity>
      {editingId&&<TouchableOpacity style={s.cancel} onPress={()=>{resetForm();setTab('expenses')}}><Text style={s.cancelText}>Cancel</Text></TouchableOpacity>}
     </Section>
     {sameDayExpenses.length>0&&<Section title={`Other expenses on ${date}`}>
@@ -208,25 +300,62 @@ export default function App(){
     </Section>
     <Section title="Daily spending">
      {Object.keys(monthExpenseItems.reduce((m,e)=>(m[e.date]=1,m),{})).length?
-      Object.entries(monthExpenseItems.reduce((m,e)=>(m[e.date]=(m[e.date]||0)+Number(e.amount),m),{})).sort().map(([d,v])=><View style={s.rowTop} key={d}><Text>{d}</Text><Text style={s.bold}>{formatINR(v)}</Text></View>):
+      Object.entries(monthExpenseItems.reduce((m,e)=>(m[e.date]=(m[e.date]||0)+Number(e.amount),m),{})).sort().map(([d,v])=><View style={s.rowTop} key={d}><Text style={s.bold}>{d}</Text><Text style={s.bold}>{formatINR(v)}</Text></View>):
       <EmptyState icon="📅" text="No spending yet this month."/>}
     </Section>
     <Section title="Monthly overview (income vs expense)"><MonthlyOverview expenses={expenses} cats={cats}/></Section>
    </>}
 
-   {tab==='budget'&&<Section title="Monthly budget">
-    <Text style={s.muted}>Spent</Text><Text style={s.big}>{formatINR(spent)}</Text>
-    <Text style={s.muted}>Budget</Text>
-    <TextInput style={s.input} keyboardType="numeric" placeholder="Enter your monthly budget" value={budget?String(budget):''} onChangeText={x=>setBudget(Number(x)||0)}/>
-    {budget>0?<>
-     <View style={s.track}><View style={[s.fill,pct>=80&&s.fillWarn,{width:pct+'%'}]}/></View>
-     <View style={s.rowTop}><Text>{pct.toFixed(0)}% used</Text><Text>{formatINR(Math.max(0,budget-spent))} remaining</Text></View>
-     {pct>=80&&<Text style={s.alert}>⚠️ You are approaching your monthly budget.</Text>}
-    </>:<Text style={s.hint}>Set a budget above to track your spending against it.</Text>}
-   </Section>}
+   {tab==='budget'&&<>
+    <Section title="Monthly budget">
+     <Text style={s.muted}>Spent</Text><Text style={s.big}>{formatINR(spent)}</Text>
+     <Text style={s.muted}>Budget</Text>
+     <TextInput style={s.input} keyboardType="numeric" placeholder="Enter your monthly budget" value={budget?String(budget):''} onChangeText={x=>setBudget(Number(x)||0)}/>
+     {budget>0?<>
+      <View style={s.track}><View style={[s.fill,pct>=80&&s.fillWarn,{width:pct+'%'}]}/></View>
+      <View style={s.rowTop}><Text style={s.bold}>{pct.toFixed(0)}% used</Text><Text style={s.bold}>{formatINR(Math.max(0,budget-spent))} remaining</Text></View>
+      {pct>=80&&<Text style={s.alert}>⚠️ You are approaching your monthly budget.</Text>}
+     </>:<Text style={s.hint}>Set a budget above to track your spending against it.</Text>}
+    </Section>
+    <Section title="Category budgets">
+     <Text style={s.hint}>Set a monthly limit for individual categories, in addition to your overall budget above.</Text>
+     {cats.filter(c=>!c.income).map(c=>{
+      const catBudget=categoryBudgets[c.id]||0;
+      const catSpent=categorySpend[c.id]||0;
+      const catPct=catBudget>0?Math.min(100,catSpent/catBudget*100):0;
+      return <View key={c.id} style={{marginTop:14}}>
+       <View style={s.rowTop}>
+        <Text style={s.bold}>{c.icon} {c.name}</Text>
+        <TextInput style={s.catBudgetInput} keyboardType="numeric" placeholder="No limit" value={catBudget?String(catBudget):''} onChangeText={v=>setCategoryBudget(c.id,v)}/>
+       </View>
+       {catBudget>0&&<>
+        <View style={s.track}><View style={[s.fill,catPct>=80&&s.fillWarn,{width:catPct+'%'}]}/></View>
+        <Text style={s.hint}>{formatINR(catSpent)} of {formatINR(catBudget)} spent this month</Text>
+       </>}
+      </View>
+     })}
+    </Section>
+    <Section title="Recurring expenses">
+     {recurring.length?recurring.map(t=>{
+      const c=cats.find(c=>c.id===t.category);
+      return <View key={t.id} style={s.row}>
+       <Text style={s.emoji}>{c?.icon||'📦'}</Text>
+       <View style={{flex:1}}><Text style={s.bold}>{t.description}</Text><Text style={s.muted}>{frequencyLabels[t.frequency]} · {formatINR(t.amount)}{!t.active?' · Paused':''}</Text></View>
+       <TouchableOpacity onPress={()=>toggleRecurring(t.id)}><Text style={s.linkBtn}>{t.active?'Pause':'Resume'}</Text></TouchableOpacity>
+       <TouchableOpacity onPress={()=>deleteRecurring(t.id)}><Text style={s.danger}>Delete</Text></TouchableOpacity>
+      </View>
+     }):<EmptyState icon="🔁" text="No recurring expenses yet. Add one from the Add expense screen using the Repeat option." actionLabel="Add an expense" onAction={()=>startAdd()}/>}
+    </Section>
+   </>}
 
    {tab==='categories'&&<Section title="Categories">
-    <View style={s.rowInline}><TextInput style={[s.input,{flex:1}]} placeholder="New category name" value={newCat} onChangeText={setNewCat}/><TouchableOpacity style={s.addCatBtn} onPress={addCategory}><Text style={s.primaryText}>＋ Add</Text></TouchableOpacity></View>
+    <TextInput style={s.input} placeholder="New category name" value={newCat} onChangeText={setNewCat}/>
+    <Text style={s.label}>Icon</Text>
+    <View style={s.catGrid}>
+     {CATEGORY_ICON_CHOICES.map(em=><TouchableOpacity key={em} onPress={()=>setNewCatIcon(em)} style={[s.chip,newCatIcon===em&&s.selected]}><Text style={{fontSize:18}}>{em}</Text></TouchableOpacity>)}
+    </View>
+    <TouchableOpacity style={s.primary} onPress={addCategory}><Text style={s.primaryText}>＋ Add category</Text></TouchableOpacity>
+    <Text style={[s.label,{marginTop:18}]}>Your categories</Text>
     <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text style={s.chipText}>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)}><Text style={s.danger}> ✕</Text></TouchableOpacity>}</View>)}</View>
    </Section>}
 
@@ -249,18 +378,79 @@ export default function App(){
      <TextInput style={s.input} keyboardType="email-address" autoCapitalize="none" value={profile.email||''} onChangeText={x=>setProfile({...profile,email:x})} placeholder="jane@example.com"/>
      <Text style={s.hint}>Saved automatically, and encrypted at rest like the rest of your data. Set a nickname to personalize your dashboard greeting.</Text>
     </Section>
+    <Section title="App lock">
+     {appLock.enabled?<>
+      <Text style={s.hint}>App lock is on. You&apos;ll need {appLock.mode==='biometric'?'Face ID / fingerprint (or your PIN)':'your PIN'} to open the app.</Text>
+      {biometrySupported&&<View style={[s.rowTop,{marginTop:10}]}>
+       <Text style={s.bold}>Also allow Face ID / fingerprint</Text>
+       <TouchableOpacity onPress={()=>toggleBiometricMode(appLock.mode!=='biometric')} style={[s.chip,appLock.mode==='biometric'&&s.selected]}><Text style={s.chipText}>{appLock.mode==='biometric'?'On':'Off'}</Text></TouchableOpacity>
+      </View>}
+      {showPinSetup?<PinSetupForm pinDraft={pinDraft} setPinDraft={setPinDraft} pinConfirm={pinConfirm} setPinConfirm={setPinConfirm} onSave={savePin} onCancel={()=>{setShowPinSetup(false);setPinDraft('');setPinConfirm('')}}/>:<>
+       <TouchableOpacity style={s.secondary} onPress={()=>setShowPinSetup(true)}><Text style={s.secondaryText}>Change PIN</Text></TouchableOpacity>
+       <TouchableOpacity style={s.cancel} onPress={()=>Alert.alert('Turn off app lock?','Anyone who opens the app will be able to see your data.',[{text:'Cancel',style:'cancel'},{text:'Turn off',style:'destructive',onPress:turnOffLock}])}><Text style={[s.cancelText,s.danger]}>Turn off app lock</Text></TouchableOpacity>
+      </>}
+     </>:<>
+      <Text style={s.hint}>Require a PIN{biometrySupported?' (or Face ID / fingerprint)':''} to open the app - a good idea for a finance app, especially on a shared or easily borrowed phone.</Text>
+      {showPinSetup?<PinSetupForm pinDraft={pinDraft} setPinDraft={setPinDraft} pinConfirm={pinConfirm} setPinConfirm={setPinConfirm} onSave={savePin} onCancel={()=>{setShowPinSetup(false);setPinDraft('');setPinConfirm('')}}/>:
+       <TouchableOpacity style={[s.secondary,{marginTop:12}]} onPress={()=>setShowPinSetup(true)}><Text style={s.secondaryText}>Set up app lock</Text></TouchableOpacity>}
+     </>}
+    </Section>
     <Section title="Backup & restore">
-     <Text style={s.hint}>This app keeps everything private on your device only - there's no account or cloud sync. That means uninstalling the app (or your phone's normal app-data backup not being available) can erase your data. Export a backup before uninstalling or switching phones, then restore it here afterwards.</Text>
+     <Text style={s.hint}>This app keeps everything private on your device only - there&apos;s no account or cloud sync. That means uninstalling the app (or your phone&apos;s normal app-data backup not being available) can erase your data. Export a backup before uninstalling or switching phones, then restore it here afterwards.</Text>
+     <Text style={[s.label,{marginTop:14}]}>Backup password</Text>
+     <TextInput style={s.input} secureTextEntry value={backupPassword} onChangeText={setBackupPassword} placeholder="At least 4 characters"/>
+     <Text style={s.hint}>Your backup file is encrypted with this password. Daily Expense Tracker never stores it anywhere, so if you forget it, the backup can&apos;t be recovered - keep it somewhere safe.</Text>
      <TouchableOpacity style={[s.secondary,{marginTop:14}]} onPress={exportBackup}><Text style={s.secondaryText}>⬇ Export backup</Text></TouchableOpacity>
      <Text style={[s.label,{marginTop:10}]}>Restore from backup</Text>
      <Text style={s.hint}>Open your backup file, copy all of its text, and paste it below.</Text>
      <TextInput style={[s.input,s.multiline]} multiline value={restoreText} onChangeText={setRestoreText} placeholder="Paste backup JSON here"/>
+     <TextInput style={s.input} secureTextEntry value={restorePassword} onChangeText={setRestorePassword} placeholder="Backup password (if encrypted)"/>
      <TouchableOpacity style={s.primary} onPress={restoreBackup}><Text style={s.primaryText}>Restore backup</Text></TouchableOpacity>
     </Section>
    </>}
   </ScrollView>
   <Nav/>
  </SafeAreaView>
+}
+
+function LockScreen({appLock,onUnlock}){
+ const [pin,setPin]=useState(''),[error,setError]=useState(''),[usePin,setUsePin]=useState(appLock.mode!=='biometric');
+ useEffect(()=>{
+  if(appLock.mode==='biometric'&&!usePin){
+   verifyBiometricUnlock().then(ok=>{if(ok)onUnlock();else setUsePin(true)});
+  }
+  // Only re-run when the user switches back to biometric from the PIN fallback, not on
+  // every appLock/onUnlock identity change (onUnlock is a stable callback from the parent).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[usePin]);
+ function tryPin(){
+  if(pin===appLock.pin)onUnlock();
+  else{setError('Incorrect PIN');setPin('')}
+ }
+ return <SafeAreaView style={s.safe}>
+  <View style={s.lockWrap}>
+   <Text style={s.lockIcon}>🔒</Text>
+   <Text style={s.title}>Locked</Text>
+   <Text style={s.muted}>{usePin?'Enter your PIN to continue':'Unlock with Face ID / fingerprint'}</Text>
+   {usePin?<>
+    <TextInput style={[s.input,s.pinInput]} keyboardType="numeric" secureTextEntry maxLength={6} value={pin} onChangeText={t=>{setPin(t);setError('')}} placeholder="••••" autoFocus/>
+    {!!error&&<Text style={s.danger}>{error}</Text>}
+    <TouchableOpacity style={s.primary} onPress={tryPin}><Text style={s.primaryText}>Unlock</Text></TouchableOpacity>
+    {appLock.mode==='biometric'&&<TouchableOpacity style={s.cancel} onPress={()=>setUsePin(false)}><Text style={s.cancelText}>Use Face ID / fingerprint instead</Text></TouchableOpacity>}
+   </>:<TouchableOpacity style={s.primary} onPress={()=>verifyBiometricUnlock().then(ok=>ok?onUnlock():setUsePin(true))}><Text style={s.primaryText}>Try again</Text></TouchableOpacity>}
+  </View>
+ </SafeAreaView>
+}
+
+function PinSetupForm({pinDraft,setPinDraft,pinConfirm,setPinConfirm,onSave,onCancel}){
+ return <View style={{marginTop:12}}>
+  <Text style={s.label}>New PIN (4-6 digits)</Text>
+  <TextInput style={s.input} keyboardType="numeric" secureTextEntry maxLength={6} value={pinDraft} onChangeText={setPinDraft} placeholder="••••"/>
+  <Text style={s.label}>Confirm PIN</Text>
+  <TextInput style={s.input} keyboardType="numeric" secureTextEntry maxLength={6} value={pinConfirm} onChangeText={setPinConfirm} placeholder="••••"/>
+  <TouchableOpacity style={s.primary} onPress={onSave}><Text style={s.primaryText}>Save PIN</Text></TouchableOpacity>
+  <TouchableOpacity style={s.cancel} onPress={onCancel}><Text style={s.cancelText}>Cancel</Text></TouchableOpacity>
+ </View>
 }
 
 const Section=({title,children})=><View style={s.section}><Text style={s.heading}>{title}</Text>{children}</View>;
@@ -274,7 +464,7 @@ const Row=({e,cats,onEdit,onDelete})=>{
  const c=cats.find(c=>c.id===e.category);
  return <View style={s.row}>
   <Text style={s.emoji}>{c?.icon||'📦'}</Text>
-  <View style={{flex:1}}><Text style={s.bold}>{e.description||c?.name||'Uncategorized'}</Text><Text style={s.muted}>{c?.name||'Uncategorized'} · {e.date}</Text></View>
+  <View style={{flex:1}}><Text style={s.bold}>{e.description||c?.name||'Uncategorized'}</Text><Text style={s.muted}>{c?.name||'Uncategorized'} · {e.date}{e.recurringId?' · 🔁':''}</Text></View>
   <Text style={s.bold}>{formatINR(e.amount)}</Text>
   <TouchableOpacity onPress={()=>onEdit(e)}><Text style={s.linkBtn}>Edit</Text></TouchableOpacity>
   <TouchableOpacity onPress={()=>onDelete(e.id)}><Text style={s.danger}>Delete</Text></TouchableOpacity>
@@ -318,8 +508,8 @@ function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
     const amt=spendByDay[key];
     return <TouchableOpacity key={i} disabled={!c.inMonth} onPress={()=>onSelectDay(key)}
      style={[s.calCell,!c.inMonth&&s.calOut,key===todayKey&&s.calToday,amt&&s.calSpend]}>
-     <Text style={s.calDay}>{c.day}</Text>
-     {amt?<Text style={s.calAmt} numberOfLines={1}>{formatINR(amt).replace('₹','')}</Text>:null}
+     <Text style={s.calDay} maxFontSizeMultiplier={1.3}>{c.day}</Text>
+     {amt?<Text style={s.calAmt} numberOfLines={1} maxFontSizeMultiplier={1.2}>{formatINR(amt).replace('₹','')}</Text>:null}
     </TouchableOpacity>
    })}
   </View>
@@ -332,7 +522,7 @@ function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
 // guarantees works everywhere, so every heavier style below uses that instead. Every text
 // style also sets an explicit `color` rather than relying on an inherited/default color, and
 // borders/backgrounds use higher-contrast tones so fields are clearly visible against white.
-const GREEN='#5FA429',GREEN_TINT='#E8F3D9',DARK='#151717',BG='#F0F2E9',BORDER='#C9D0BC',MUTED='#586154',WARN='#B23B3B';
+const GREEN='#5FA429',GREEN_TINT='#E8F3D9',DARK='#151717',BG='#F0F2E9',BORDER='#C9D0BC',MUTED='#586154';
 const s=StyleSheet.create({
  safe:{flex:1,backgroundColor:BG},
  container:{padding:20,paddingBottom:110},
@@ -371,6 +561,7 @@ const s=StyleSheet.create({
  dateToggle:{marginTop:12,marginBottom:4},
  input:{borderWidth:1.5,borderColor:BORDER,borderRadius:11,padding:13,fontSize:16,backgroundColor:'#fff',color:DARK},
  multiline:{height:110,textAlignVertical:'top',marginTop:10},
+ catBudgetInput:{borderWidth:1.5,borderColor:BORDER,borderRadius:9,paddingVertical:8,paddingHorizontal:12,fontSize:14,backgroundColor:'#fff',color:DARK,minWidth:100,textAlign:'right'},
  chip:{flexDirection:'row',alignItems:'center',paddingVertical:10,paddingHorizontal:14,backgroundColor:BG,borderRadius:20,marginRight:8,marginBottom:8,borderWidth:1,borderColor:BORDER},
  chipText:{color:DARK,fontSize:14},
  selected:{borderWidth:2,borderColor:DARK,backgroundColor:GREEN_TINT},
@@ -404,11 +595,14 @@ const s=StyleSheet.create({
  calDaySelected:{color:'#fff'},
  calAmt:{fontSize:8,fontWeight:'bold',color:'#3d6b12'},
  calSelected:{borderTopWidth:1,borderTopColor:BORDER,paddingTop:10,marginTop:6},
- nav:{position:'absolute',bottom:0,left:0,right:0,height:74,backgroundColor:'#fff',borderTopWidth:1.5,borderTopColor:BORDER,flexDirection:'row',alignItems:'center',paddingHorizontal:2},
+ nav:{position:'absolute',bottom:0,left:0,right:0,minHeight:74,backgroundColor:'#fff',borderTopWidth:1.5,borderTopColor:BORDER,flexDirection:'row',alignItems:'center',paddingHorizontal:2,paddingVertical:2},
  navItem:{flex:1,alignItems:'center',justifyContent:'center',paddingTop:6,paddingBottom:6},
  navIcon:{fontSize:19,color:'#5b645b'},
  navText:{fontSize:9,color:'#5b645b',fontWeight:'600',textAlign:'center',includeFontPadding:false},
  navActive:{color:DARK},
  navTextActive:{fontSize:9,fontWeight:'bold',color:DARK,textAlign:'center',includeFontPadding:false},
- navArrow:{fontSize:18,fontWeight:'bold',color:DARK,paddingHorizontal:6}
+ navArrow:{fontSize:18,fontWeight:'bold',color:DARK,paddingHorizontal:6},
+ lockWrap:{flex:1,alignItems:'center',justifyContent:'center',padding:30,gap:6},
+ lockIcon:{fontSize:44,marginBottom:6},
+ pinInput:{width:160,textAlign:'center',fontSize:22,letterSpacing:8,marginTop:20,marginBottom:6}
 });
