@@ -1,18 +1,23 @@
 import React,{useEffect,useMemo,useState,useRef} from 'react';
 import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert,AppState} from 'react-native';
+import {GestureHandlerRootView,Swipeable} from 'react-native-gesture-handler';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import * as XLSX from 'xlsx';
 import {secureGetItem,secureSetItem} from './secureStorage';
 import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
 import {isBiometrySupported,enableBiometricUnlock,disableBiometricUnlock,verifyBiometricUnlock} from './appLock';
-import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses} from './shared';
-import {Home,ListChecks,Plus,PieChart,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock} from 'lucide-react-native';
+import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses,computeQuickAddSuggestions,computeStreaks,computePeriodComparison,normalizeImportedRows} from './shared';
+import {Home,ListChecks,Plus,PieChart,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock,Pencil,Trash2} from 'lucide-react-native';
 
 const today=()=>new Date().toISOString().slice(0,10);
 const CATEGORY_ICON_CHOICES=['🏷️','🍽️','🚕','🏋️','🎮','📚','🧾','🐾','🎁','✈️','🧹','🔧'];
 
 export default function App(){
+ return <GestureHandlerRootView style={{flex:1}}><AppInner/></GestureHandlerRootView>;
+}
+
+function AppInner(){
  const [expenses,setExpenses]=useState([]),[cats,setCats]=useState(defaultCategories),[budget,setBudget]=useState(0),[loaded,setLoaded]=useState(false);
  const [profile,setProfile]=useState(defaultProfile);
  const [recurring,setRecurring]=useState([]);
@@ -23,23 +28,25 @@ export default function App(){
  const [amount,setAmount]=useState(''),[desc,setDesc]=useState(''),[category,setCategory]=useState('food'),[method,setMethod]=useState('UPI'),[date,setDate]=useState(today()),[note,setNote]=useState(''),[repeat,setRepeat]=useState('none');
  const [newCat,setNewCat]=useState(''),[newCatIcon,setNewCatIcon]=useState(CATEGORY_ICON_CHOICES[0]);
  const [search,setSearch]=useState('');
- const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState(''),[showDateFilter,setShowDateFilter]=useState(false);
+ const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState(''),[amountMin,setAmountMin]=useState(''),[amountMax,setAmountMax]=useState(''),[showDateFilter,setShowDateFilter]=useState(false);
  const [restoreText,setRestoreText]=useState(''),[backupPassword,setBackupPassword]=useState(''),[restorePassword,setRestorePassword]=useState('');
+ const [importText,setImportText]=useState('');
+ const [onboardingDone,setOnboardingDone]=useState(true);
  const now=new Date();
  const [calYear,setCalYear]=useState(now.getFullYear()),[calMonth,setCalMonth]=useState(now.getMonth());
 
- // --- undo-on-delete snackbar (replaces an irreversible confirm dialog) ---
- const [undoState,setUndoState]=useState(null); // {item,index}
- const undoTimer=useRef(null);
- function flashUndo(item,index){
-  clearTimeout(undoTimer.current);
-  setUndoState({item,index});
-  undoTimer.current=setTimeout(()=>setUndoState(null),6000);
+ // --- undo snackbar (used for both delete-undo and quick-add-undo) ---
+ const [snackbar,setSnackbar]=useState(null); // {message,onUndo}
+ const snackbarTimer=useRef(null);
+ function showSnackbar(message,onUndo){
+  clearTimeout(snackbarTimer.current);
+  setSnackbar({message,onUndo});
+  snackbarTimer.current=setTimeout(()=>setSnackbar(null),6000);
  }
- function undoDelete(){
-  if(!undoState)return;
-  setExpenses(prev=>{const n=prev.slice();n.splice(undoState.index,0,undoState.item);return n});
-  clearTimeout(undoTimer.current);setUndoState(null);
+ function dismissSnackbarAndUndo(){
+  if(!snackbar)return;
+  snackbar.onUndo();
+  clearTimeout(snackbarTimer.current);setSnackbar(null);
  }
 
  // --- app lock (session-only; never persisted, so every cold start requires unlocking again) ---
@@ -61,10 +68,11 @@ export default function App(){
   let r=await secureGetItem('recurring',[]);
   let cb=await secureGetItem('categoryBudgets',{});
   let al=await secureGetItem('appLock',defaultAppLock);
+  let ob=await secureGetItem('onboardingDone',false);
   // Catch up any recurring expenses that came due while the app was closed.
   const {newExpenses,updatedTemplates}=generateDueExpenses(r,e,today());
   if(newExpenses.length)e=[...newExpenses,...e];
-  setExpenses(e);setCats(c);setBudget(b);setProfile({...defaultProfile,...p});setRecurring(updatedTemplates);setCategoryBudgets(cb);setAppLock({...defaultAppLock,...al});setLoaded(true)
+  setExpenses(e);setCats(c);setBudget(b);setProfile({...defaultProfile,...p});setRecurring(updatedTemplates);setCategoryBudgets(cb);setAppLock({...defaultAppLock,...al});setOnboardingDone(!!ob);setLoaded(true)
  })()},[]);
  // guarded by `loaded` so we never overwrite storage with the initial empty state before load finishes
  useEffect(()=>{if(loaded)secureSetItem('expenses',expenses).catch(console.error)},[expenses,loaded]);
@@ -74,6 +82,7 @@ export default function App(){
  useEffect(()=>{if(loaded)secureSetItem('recurring',recurring).catch(console.error)},[recurring,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('categoryBudgets',categoryBudgets).catch(console.error)},[categoryBudgets,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('appLock',appLock).catch(console.error)},[appLock,loaded]);
+ useEffect(()=>{if(loaded)secureSetItem('onboardingDone',onboardingDone).catch(console.error)},[onboardingDone,loaded]);
 
  const month=expenses.filter(e=>e.date.startsWith(today().slice(0,7)));
  const monthExpenseItems=month.filter(e=>!isIncomeCategory(cats,e.category));
@@ -87,14 +96,20 @@ export default function App(){
    (e.description+' '+(e.note||'')).toLowerCase().includes(search.toLowerCase())
    &&(!dateFrom||e.date>=dateFrom)
    &&(!dateTo||e.date<=dateTo)
-  ).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,search,dateFrom,dateTo]);
- const dateFilterActive=dateFrom||dateTo;
+   &&(!amountMin||Number(e.amount)>=Number(amountMin))
+   &&(!amountMax||Number(e.amount)<=Number(amountMax))
+  ).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,search,dateFrom,dateTo,amountMin,amountMax]);
+ const dateFilterActive=dateFrom||dateTo||amountMin||amountMax;
  const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
  // Shown under the Add-expense form so tapping a calendar date still gives visibility
  // into what's already logged that day, without a detour through the Expenses tab.
  const sameDayExpenses=useMemo(()=>expenses.filter(e=>e.date===date&&e.id!==editingId).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,date,editingId]);
  // Per-category spend this month, for the category-budget progress bars in the Budget tab.
  const categorySpend=useMemo(()=>{const m={};monthExpenseItems.forEach(e=>{m[e.category]=(m[e.category]||0)+Number(e.amount)});return m},[monthExpenseItems]);
+ // Chips of things you've logged more than once, so adding them again is one tap.
+ const quickAdd=useMemo(()=>computeQuickAddSuggestions(expenses,6),[expenses]);
+ const streaks=useMemo(()=>computeStreaks(expenses,today()),[expenses]);
+ const comparison=useMemo(()=>computePeriodComparison(expenses,cats,today()),[expenses,cats]);
 
  function resetForm(presetDate){setEditingId(null);setAmount('');setDesc('');setCategory(cats.find(c=>!c.income)?.id||cats[0]?.id||'food');setMethod('UPI');setDate(presetDate||today());setNote('');setRepeat('none')}
  function startEdit(e){setEditingId(e.id);setAmount(String(e.amount));setDesc(e.description||'');setCategory(e.category);setMethod(e.paymentMethod);setDate(e.date);setNote(e.note||'');setRepeat('none');setTab('add')}
@@ -122,9 +137,16 @@ export default function App(){
   setExpenses(prev=>{
    const index=prev.findIndex(e=>e.id===id);
    if(index===-1)return prev;
-   flashUndo(prev[index],index);
+   const item=prev[index];
+   showSnackbar('Expense deleted',()=>setExpenses(p=>{const n=p.slice();n.splice(index,0,item);return n}));
    return prev.filter(e=>e.id!==id);
   });
+ }
+ // One tap to re-log something you've bought before (Chai, auto fare, etc.) - no form at all.
+ function addQuickExpense(sugg){
+  const newExpense={id:Date.now().toString(),amount:sugg.amount,description:sugg.description,date:today(),category:sugg.category,paymentMethod:sugg.paymentMethod,note:''};
+  setExpenses(prev=>[newExpense,...prev]);
+  showSnackbar(`Added ${sugg.description} · ${formatINR(sugg.amount)}`,()=>setExpenses(prev=>prev.filter(e=>e.id!==newExpense.id)));
  }
  function addCategory(){
   if(!newCat.trim())return;
@@ -202,6 +224,33 @@ export default function App(){
    }}
   ])
  }
+ // CSV import for migrating from a spreadsheet. No document picker is installed, so - matching
+ // the existing paste-based backup restore flow - the user copies their sheet as CSV text and
+ // pastes it in; XLSX can parse plain CSV text directly, same library already used for export.
+ function importCSV(){
+  if(!importText.trim())return Alert.alert('Paste CSV first','Copy your spreadsheet as CSV text (e.g. from Excel or Google Sheets) and paste it here.');
+  let imported,skipped;
+  try{
+   const wb=XLSX.read(importText,{type:'string'});
+   const ws=wb.Sheets[wb.SheetNames[0]];
+   const rows=XLSX.utils.sheet_to_json(ws,{raw:false,defval:''});
+   ({imported,skipped}=normalizeImportedRows(rows,cats));
+  }catch(e){
+   return Alert.alert('Could not read that','Make sure you pasted valid CSV text, with a header row including at least Date and Amount.');
+  }
+  if(!imported.length)return Alert.alert('Nothing to import',skipped?`All ${skipped} row(s) were skipped - check the Date and Amount columns.`:'No rows were found in that text.');
+  Alert.alert(
+   `Import ${imported.length} expense${imported.length===1?'':'s'}?`,
+   skipped?`${skipped} row(s) will be skipped due to a missing or invalid amount/date. This adds to your existing expenses - nothing will be overwritten.`:"This adds to your existing expenses - nothing will be overwritten.",
+   [
+    {text:'Cancel',style:'cancel'},
+    {text:'Import',onPress:()=>{
+     setExpenses(prev=>[...imported,...prev]);setImportText('');
+     Alert.alert('Imported',`Added ${imported.length} expense${imported.length===1?'':'s'}.`);
+    }}
+   ]
+  );
+ }
 
  // --- app lock setup (Profile tab) ---
  const [pinDraft,setPinDraft]=useState(''),[pinConfirm,setPinConfirm]=useState(''),[showPinSetup,setShowPinSetup]=useState(false);
@@ -223,7 +272,7 @@ export default function App(){
  }
 
  const Nav=()=><View style={s.nav}>{[['home',Home,'Home'],['expenses',ListChecks,'Expenses'],['add',Plus,'Add'],['analytics',PieChart,'Analytics'],['budget',Target,'Budget'],['categories',Tags,'Categories'],['profile',User,'Profile']].map(([key,Icon,label])=>
-  <TouchableOpacity key={key} onPress={()=>key==='add'?startAdd():setTab(key)} style={s.navItem}>
+  <TouchableOpacity key={key} onPress={()=>key==='add'?startAdd():setTab(key)} style={s.navItem} accessibilityRole="tab" accessibilityState={{selected:tab===key}} accessibilityLabel={label}>
    <Icon size={19} color={tab===key?DARK:'#5b645b'} strokeWidth={tab===key?2.3:2}/>
    <Text style={tab===key?s.navTextActive:s.navText} maxFontSizeMultiplier={1.3} numberOfLines={1}>{label}</Text>
   </TouchableOpacity>)}
@@ -233,6 +282,10 @@ export default function App(){
 
  if(appLock.enabled&&!unlocked){
   return <LockScreen appLock={appLock} onUnlock={()=>setUnlocked(true)}/>;
+ }
+
+ if(!onboardingDone){
+  return <Onboarding onDone={()=>setOnboardingDone(true)}/>;
  }
 
  return <SafeAreaView style={s.safe}>
@@ -255,6 +308,20 @@ export default function App(){
      {budget<=0&&<TouchableOpacity onPress={()=>setTab('budget')}><Text style={s.heroHint}>Set a monthly budget to see your remaining balance →</Text></TouchableOpacity>}
     </View>
     <View style={s.two}><Stat t="Income this month" v={formatINR(income)}/><Stat t="Top category" v={byCat[0]?.name||'—'}/></View>
+    {streaks.current>=2&&<View style={s.streakBadge}><Text style={s.streakText}>🔥 {streaks.current}-day logging streak{streaks.longest>streaks.current?` · best ${streaks.longest}`:''}</Text></View>}
+    {quickAdd.length>0&&<Section title="Quick add">
+     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      {quickAdd.map((q,i)=>{
+       const c=cats.find(c=>c.id===q.category);
+       return <TouchableOpacity key={i} onPress={()=>addQuickExpense(q)} style={s.quickChip}
+        accessibilityRole="button" accessibilityLabel={`Add ${q.description}, ${formatINR(q.amount)}`}>
+        <Text style={s.quickChipName} numberOfLines={1}>{c?.icon||'📦'} {q.description}</Text>
+        <Text style={s.quickChipAmount}>{formatINR(q.amount)}</Text>
+       </TouchableOpacity>
+      })}
+     </ScrollView>
+     <Text style={s.hint}>Things you&apos;ve logged more than once - tap to add again with today&apos;s date.</Text>
+    </Section>}
     <Section title="Calendar">
      <Calendar year={calYear} month={calMonth} spendByDay={spendByDay}
       onSelectDay={openDay}
@@ -270,12 +337,16 @@ export default function App(){
 
    {tab==='expenses'&&<Section title="Expense history">
     <TextInput style={s.input} placeholder="Search description or note" value={search} onChangeText={setSearch}/>
-    <TouchableOpacity style={s.dateToggle} onPress={()=>setShowDateFilter(!showDateFilter)}><Text style={s.linkBtn}>{showDateFilter?'Hide date filter':'Filter by date'}</Text></TouchableOpacity>
+    <TouchableOpacity style={s.dateToggle} onPress={()=>setShowDateFilter(!showDateFilter)}><Text style={s.linkBtn}>{showDateFilter?'Hide filters':'Filter by date or amount'}</Text></TouchableOpacity>
     {showDateFilter&&<View style={s.rowInline}>
      <View style={{flex:1}}><Text style={s.smallLabel}>From (YYYY-MM-DD)</Text><TextInput style={s.input} value={dateFrom} onChangeText={setDateFrom} placeholder="2026-09-01"/></View>
      <View style={{flex:1}}><Text style={s.smallLabel}>To (YYYY-MM-DD)</Text><TextInput style={s.input} value={dateTo} onChangeText={setDateTo} placeholder="2026-09-30"/></View>
     </View>}
-    {dateFilterActive&&<TouchableOpacity onPress={()=>{setDateFrom('');setDateTo('')}}><Text style={s.danger}>Clear date filter</Text></TouchableOpacity>}
+    {showDateFilter&&<View style={s.rowInline}>
+     <View style={{flex:1}}><Text style={s.smallLabel}>Min amount</Text><TextInput style={s.input} keyboardType="numeric" value={amountMin} onChangeText={setAmountMin} placeholder="₹0"/></View>
+     <View style={{flex:1}}><Text style={s.smallLabel}>Max amount</Text><TextInput style={s.input} keyboardType="numeric" value={amountMax} onChangeText={setAmountMax} placeholder="No limit"/></View>
+    </View>}
+    {dateFilterActive&&<TouchableOpacity onPress={()=>{setDateFrom('');setDateTo('');setAmountMin('');setAmountMax('')}}><Text style={s.danger}>Clear filters</Text></TouchableOpacity>}
     {singleDaySelected&&<TouchableOpacity style={[s.secondary,s.btnRow]} onPress={()=>startAdd(singleDaySelected)}><Plus size={16} color="#33500f"/><Text style={s.secondaryText}>Add expense for {singleDaySelected}</Text></TouchableOpacity>}
     {expenses.length>0&&<TouchableOpacity style={s.secondary} onPress={exportExcel}><Text style={s.secondaryText}>Export to Excel</Text></TouchableOpacity>}
     {visibleExpenses.map(e=><Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense}/>)}
@@ -314,6 +385,18 @@ export default function App(){
    </>}
 
    {tab==='analytics'&&<>
+    <Section title="This month vs last month">
+     <View style={s.rowTop}><Text style={s.bold}>This month</Text><Text style={s.bold}>{formatINR(comparison.curTotal)}</Text></View>
+     <View style={s.rowTop}><Text style={s.muted}>Last month</Text><Text style={s.muted}>{formatINR(comparison.prevTotal)}</Text></View>
+     {comparison.momPct===null?
+      <Text style={s.hint}>Not enough history yet to compare to last month.</Text>:
+      <Text style={[s.hint,comparison.momPct>0?s.danger:comparison.momPct<0?s.positive:null]}>
+       {comparison.momPct>0?'▲':comparison.momPct<0?'▼':'—'} {Math.abs(comparison.momPct).toFixed(0)}% vs last month
+      </Text>}
+     {comparison.yoyPct!==null&&<Text style={s.hint}>
+      {comparison.yoyPct>0?'▲':comparison.yoyPct<0?'▼':'—'} {Math.abs(comparison.yoyPct).toFixed(0)}% vs {monthNames[Number(comparison.lastYearMonth.slice(5,7))-1]} last year
+     </Text>}
+    </Section>
     <Section title="Category spending">
      {byCat.length?byCat.map(c=><View style={s.metric} key={c.id}><View style={s.rowTop}><Text style={s.bold}>{c.icon} {c.name}</Text><Text style={s.bold}>{formatINR(c.value)}</Text></View><View style={s.track}><View style={[s.fill,{width:(spent?c.value/spent*100:0)+'%'}]}/></View></View>):
       <EmptyState icon="📊" text="No spending yet this month. Add an expense to see the breakdown."/>}
@@ -372,11 +455,11 @@ export default function App(){
     <TextInput style={s.input} placeholder="New category name" value={newCat} onChangeText={setNewCat}/>
     <Text style={s.label}>Icon</Text>
     <View style={s.catGrid}>
-     {CATEGORY_ICON_CHOICES.map(em=><TouchableOpacity key={em} onPress={()=>setNewCatIcon(em)} style={[s.chip,newCatIcon===em&&s.selected]}><Text style={{fontSize:18}}>{em}</Text></TouchableOpacity>)}
+     {CATEGORY_ICON_CHOICES.map(em=><TouchableOpacity key={em} onPress={()=>setNewCatIcon(em)} style={[s.chip,newCatIcon===em&&s.selected]} accessibilityRole="button" accessibilityLabel={`Use icon ${em}`}><Text style={{fontSize:18}}>{em}</Text></TouchableOpacity>)}
     </View>
     <TouchableOpacity style={[s.primary,s.btnRow]} onPress={addCategory}><Plus size={17} color="#fff"/><Text style={s.primaryText}>Add category</Text></TouchableOpacity>
     <Text style={[s.label,{marginTop:18}]}>Your categories</Text>
-    <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text style={s.chipText}>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)} style={{marginLeft:2}}><X size={14} color="#b23b3b"/></TouchableOpacity>}</View>)}</View>
+    <View style={s.catGrid}>{cats.map(c=><View style={s.catChip} key={c.id}><Text style={s.chipText}>{c.icon} {c.name}</Text>{c.id.startsWith('custom-')&&<TouchableOpacity onPress={()=>removeCategory(c.id)} style={{marginLeft:2}} accessibilityRole="button" accessibilityLabel={`Remove ${c.name} category`}><X size={14} color="#b23b3b"/></TouchableOpacity>}</View>)}</View>
    </Section>}
 
    {tab==='profile'&&<>
@@ -384,7 +467,7 @@ export default function App(){
      <View style={s.avatarPreviewRow}><View style={s.avatarCircleLg}><Text style={s.avatarEmojiLg}>{profile.avatar||'🙂'}</Text></View></View>
      <Text style={s.label}>Choose an avatar</Text>
      <View style={s.catGrid}>
-      {avatarChoices.map(em=><TouchableOpacity key={em} onPress={()=>setProfile({...profile,avatar:em})} style={[s.chip,profile.avatar===em&&s.selected]}><Text style={{fontSize:20}}>{em}</Text></TouchableOpacity>)}
+      {avatarChoices.map(em=><TouchableOpacity key={em} onPress={()=>setProfile({...profile,avatar:em})} style={[s.chip,profile.avatar===em&&s.selected]} accessibilityRole="button" accessibilityLabel={`Choose ${em} avatar`}><Text style={{fontSize:20}}>{em}</Text></TouchableOpacity>)}
      </View>
     </Section>
     <Section title="Profile">
@@ -415,6 +498,11 @@ export default function App(){
        <TouchableOpacity style={[s.secondary,{marginTop:12}]} onPress={()=>setShowPinSetup(true)}><Text style={s.secondaryText}>Set up app lock</Text></TouchableOpacity>}
      </>}
     </Section>
+    <Section title="Import from spreadsheet">
+     <Text style={s.hint}>Migrating from a spreadsheet? Copy it as CSV text (Date, Amount, Category, Description, Payment Method, Note columns - order doesn&apos;t matter, and Category is matched by name) and paste it below.</Text>
+     <TextInput style={[s.input,s.multiline]} multiline value={importText} onChangeText={setImportText} placeholder="Paste CSV text here"/>
+     <TouchableOpacity style={[s.secondary,s.btnRow]} onPress={importCSV}><Upload size={16} color="#33500f"/><Text style={s.secondaryText}>Import CSV</Text></TouchableOpacity>
+    </Section>
     <Section title="Backup & restore">
      <Text style={s.hint}>This app keeps everything private on your device only - there&apos;s no account or cloud sync. That means uninstalling the app (or your phone&apos;s normal app-data backup not being available) can erase your data. Export a backup before uninstalling or switching phones, then restore it here afterwards.</Text>
      <Text style={[s.label,{marginTop:14}]}>Backup password</Text>
@@ -429,9 +517,9 @@ export default function App(){
     </Section>
    </>}
   </ScrollView>
-  {undoState&&<View style={s.snackbar}>
-   <Text style={s.snackbarText}>Expense deleted</Text>
-   <TouchableOpacity onPress={undoDelete}><Text style={s.snackbarAction}>Undo</Text></TouchableOpacity>
+  {snackbar&&<View style={s.snackbar}>
+   <Text style={s.snackbarText} numberOfLines={1}>{snackbar.message}</Text>
+   <TouchableOpacity onPress={dismissSnackbarAndUndo}><Text style={s.snackbarAction}>Undo</Text></TouchableOpacity>
   </View>}
   <Nav/>
  </SafeAreaView>
@@ -477,6 +565,29 @@ function PinSetupForm({pinDraft,setPinDraft,pinConfirm,setPinConfirm,onSave,onCa
  </View>
 }
 
+function Onboarding({onDone}){
+ return <SafeAreaView style={s.safe}>
+  <ScrollView contentContainerStyle={[s.container,{flexGrow:1,justifyContent:'center'}]}>
+   <Text style={s.onboardEmoji}>💰</Text>
+   <Text style={[s.title,{textAlign:'center'}]}>Welcome to Daily Expense Tracker</Text>
+   <Text style={[s.muted,{textAlign:'center',marginTop:6,marginBottom:26}]}>A few things before you start:</Text>
+   <View style={s.onboardRow}>
+    <Text style={s.onboardIcon}>✍️</Text>
+    <View style={{flex:1}}><Text style={s.bold}>Log expenses in seconds</Text><Text style={s.muted}>Tap a date on the calendar, or the + tab, to add one. No account or setup needed.</Text></View>
+   </View>
+   <View style={s.onboardRow}>
+    <Text style={s.onboardIcon}>🎯</Text>
+    <View style={{flex:1}}><Text style={s.bold}>Set a budget anytime</Text><Text style={s.muted}>See exactly what&apos;s left to spend this month, overall or per category.</Text></View>
+   </View>
+   <View style={s.onboardRow}>
+    <Text style={s.onboardIcon}>🔒</Text>
+    <View style={{flex:1}}><Text style={s.bold}>Everything stays private</Text><Text style={s.muted}>Your data is encrypted on this device and never leaves it unless you export a backup yourself.</Text></View>
+   </View>
+   <TouchableOpacity style={[s.primary,{marginTop:30}]} onPress={onDone} accessibilityRole="button"><Text style={s.primaryText}>Get started</Text></TouchableOpacity>
+  </ScrollView>
+ </SafeAreaView>
+}
+
 const Section=({title,children})=><View style={s.section}><Text style={s.heading}>{title}</Text>{children}</View>;
 const Stat=({t,v})=><View style={s.stat}><Text style={s.muted}>{t}</Text><Text style={s.statValue}>{v}</Text></View>;
 const EmptyState=({icon,text,actionLabel,onAction})=><View style={s.empty}>
@@ -486,13 +597,23 @@ const EmptyState=({icon,text,actionLabel,onAction})=><View style={s.empty}>
 </View>;
 const Row=({e,cats,onEdit,onDelete})=>{
  const c=cats.find(c=>c.id===e.category);
- return <View style={s.row}>
-  <Text style={s.emoji}>{c?.icon||'📦'}</Text>
-  <View style={{flex:1}}><Text style={s.bold}>{e.description||c?.name||'Uncategorized'}</Text><Text style={s.muted}>{c?.name||'Uncategorized'} · {e.date}{e.recurringId?' · 🔁':''}</Text></View>
-  <Text style={s.bold}>{formatINR(e.amount)}</Text>
-  <TouchableOpacity onPress={()=>onEdit(e)}><Text style={s.linkBtn}>Edit</Text></TouchableOpacity>
-  <TouchableOpacity onPress={()=>onDelete(e.id)}><Text style={s.danger}>Delete</Text></TouchableOpacity>
- </View>
+ const label=e.description||c?.name||'Uncategorized';
+ // Swipe is a fast power-user shortcut, but the Edit/Delete text links stay visible too -
+ // swipe gestures alone are easy to miss (and hard to reach for screen-reader users), so this
+ // is a progressive enhancement rather than a replacement for the tappable controls.
+ const renderRightActions=()=><View style={{flexDirection:'row'}}>
+  <TouchableOpacity style={s.swipeEdit} onPress={()=>onEdit(e)} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}><Pencil size={18} color="#fff"/></TouchableOpacity>
+  <TouchableOpacity style={s.swipeDelete} onPress={()=>onDelete(e.id)} accessibilityRole="button" accessibilityLabel={`Delete ${label}`}><Trash2 size={18} color="#fff"/></TouchableOpacity>
+ </View>;
+ return <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+  <View style={s.row}>
+   <Text style={s.emoji}>{c?.icon||'📦'}</Text>
+   <View style={{flex:1}}><Text style={s.bold}>{label}</Text><Text style={s.muted}>{c?.name||'Uncategorized'} · {e.date}{e.recurringId?' · 🔁':''}</Text></View>
+   <Text style={s.bold}>{formatINR(e.amount)}</Text>
+   <TouchableOpacity onPress={()=>onEdit(e)} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}><Text style={s.linkBtn}>Edit</Text></TouchableOpacity>
+   <TouchableOpacity onPress={()=>onDelete(e.id)} accessibilityRole="button" accessibilityLabel={`Delete ${label}`}><Text style={s.danger}>Delete</Text></TouchableOpacity>
+  </View>
+ </Swipeable>
 };
 
 function MonthlyOverview({expenses,cats}){
@@ -523,7 +644,7 @@ function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  return <View>
   <View style={s.rowTop}>
    <Text style={s.bold}>{monthNames[month]} {year}</Text>
-   <View style={{flexDirection:'row',gap:14}}><TouchableOpacity onPress={onPrev} style={s.calNavBtn}><ChevronLeft size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity><TouchableOpacity onPress={onNext} style={s.calNavBtn}><ChevronRight size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity></View>
+   <View style={{flexDirection:'row',gap:14}}><TouchableOpacity onPress={onPrev} style={s.calNavBtn} accessibilityRole="button" accessibilityLabel="Previous month"><ChevronLeft size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity><TouchableOpacity onPress={onNext} style={s.calNavBtn} accessibilityRole="button" accessibilityLabel="Next month"><ChevronRight size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity></View>
   </View>
   <View style={s.calRow}>{weekdayLabels.map(w=><Text style={s.calDow} key={w}>{w}</Text>)}</View>
   <View style={s.calGrid}>
@@ -628,6 +749,17 @@ const s=StyleSheet.create({
  lockWrap:{flex:1,alignItems:'center',justifyContent:'center',padding:30,gap:6},
  pinInput:{width:160,textAlign:'center',fontSize:22,letterSpacing:8,marginTop:20,marginBottom:6},
  snackbar:{position:'absolute',left:16,right:16,bottom:88,backgroundColor:DARK,borderRadius:12,paddingVertical:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',shadowColor:'#000',shadowOpacity:0.25,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:6},
- snackbarText:{color:'#fff',fontSize:14},
- snackbarAction:{color:GREEN,fontWeight:'bold',fontSize:14}
+ snackbarText:{color:'#fff',fontSize:14,flex:1,marginRight:12},
+ snackbarAction:{color:GREEN,fontWeight:'bold',fontSize:14},
+ positive:{color:'#3d6b12'},
+ streakBadge:{backgroundColor:'#FBE4C0',borderRadius:12,paddingVertical:10,paddingHorizontal:14,marginTop:14},
+ streakText:{color:'#7a4d0a',fontWeight:'bold',fontSize:13},
+ quickChip:{backgroundColor:GREEN_TINT,borderRadius:14,paddingVertical:10,paddingHorizontal:14,marginRight:10,minWidth:110,borderWidth:1,borderColor:'#cfe3b3'},
+ quickChipName:{color:DARK,fontWeight:'bold',fontSize:13},
+ quickChipAmount:{color:'#33500f',fontSize:13,marginTop:4},
+ swipeEdit:{backgroundColor:'#2F6FE0',justifyContent:'center',alignItems:'center',width:64},
+ swipeDelete:{backgroundColor:'#b23b3b',justifyContent:'center',alignItems:'center',width:64},
+ onboardEmoji:{fontSize:52,textAlign:'center',marginBottom:8},
+ onboardRow:{flexDirection:'row',gap:14,alignItems:'flex-start',marginBottom:22},
+ onboardIcon:{fontSize:26}
 });

@@ -111,3 +111,114 @@ export function generateDueExpenses(templates,existingExpenses,todayStr){
  }
  return {newExpenses,updatedTemplates};
 }
+
+// --- quick-add suggestions (derived automatically from your own logging history - no setup) ---
+// Groups expenses by an exact (description, category, amount) match, so a chip only appears
+// once you've genuinely logged that same thing more than once - it's a reflection of real
+// habits, not a manually curated list. Ties are broken by recency so the chips stay current.
+export function computeQuickAddSuggestions(expenses,limit=6){
+ const groups={};
+ for(const e of expenses){
+  const desc=(e.description||'').trim();
+  if(!desc)continue;
+  const key=desc.toLowerCase()+'|'+e.category+'|'+Number(e.amount);
+  if(!groups[key])groups[key]={description:desc,category:e.category,amount:Number(e.amount),paymentMethod:e.paymentMethod,count:0,lastDate:e.date};
+  groups[key].count++;
+  if(e.date>groups[key].lastDate){groups[key].lastDate=e.date;groups[key].paymentMethod=e.paymentMethod}
+ }
+ return Object.values(groups)
+  .filter(g=>g.count>=2)
+  .sort((a,b)=>b.count-a.count||b.lastDate.localeCompare(a.lastDate))
+  .slice(0,limit);
+}
+
+// --- spending streaks (consecutive calendar days with at least one expense logged) ---
+export function computeStreaks(expenses,todayStr){
+ const days=[...new Set(expenses.map(e=>e.date))].sort();
+ if(!days.length)return {current:0,longest:0};
+ let longest=1,run=1;
+ for(let i=1;i<days.length;i++){
+  const prev=new Date(days[i-1]+'T00:00:00'),cur=new Date(days[i]+'T00:00:00');
+  const diffDays=Math.round((cur-prev)/86400000);
+  if(diffDays===1){run++;longest=Math.max(longest,run)}
+  else if(diffDays>1){run=1}
+ }
+ // current streak: walk back from today (or yesterday, so today not yet logged doesn't zero it out)
+ const daySet=new Set(days);
+ let current=0;
+ let cursor=new Date(todayStr+'T00:00:00');
+ if(!daySet.has(todayStr))cursor.setDate(cursor.getDate()-1);
+ while(daySet.has(cursor.toISOString().slice(0,10))){
+  current++;
+  cursor.setDate(cursor.getDate()-1);
+ }
+ return {current,longest};
+}
+
+// --- month-over-month / year-over-year comparison (Analytics) ---
+// All amounts are for non-income expense categories only, matching how the rest of the app
+// defines "spending". monthStr is 'YYYY-MM'.
+function monthTotal(expenses,categories,monthStr){
+ return total(expenses.filter(e=>e.date.startsWith(monthStr)&&!isIncomeCategory(categories,e.category)));
+}
+function pctChange(prev,cur){
+ if(prev===0)return cur===0?0:null; // null = undefined change (nothing to compare against)
+ return ((cur-prev)/prev)*100;
+}
+export function computePeriodComparison(expenses,categories,todayStr){
+ const [y,m]=todayStr.split('-').map(Number);
+ const curMonth=`${y}-${pad2(m)}`;
+ const prevDate=new Date(y,m-2,1); // month is 1-indexed here, JS Date month is 0-indexed
+ const prevMonth=`${prevDate.getFullYear()}-${pad2(prevDate.getMonth()+1)}`;
+ const lastYearMonth=`${y-1}-${pad2(m)}`;
+ const curTotal=monthTotal(expenses,categories,curMonth);
+ const prevTotal=monthTotal(expenses,categories,prevMonth);
+ const lastYearTotal=monthTotal(expenses,categories,lastYearMonth);
+ return {
+  curMonth,prevMonth,lastYearMonth,
+  curTotal,prevTotal,lastYearTotal,
+  momPct:pctChange(prevTotal,curTotal),
+  yoyPct:pctChange(lastYearTotal,curTotal)
+ };
+}
+
+// --- CSV / Excel import row normalization (shared by both platforms' xlsx-based readers) ---
+// Takes raw parsed rows (already turned into plain objects by XLSX.utils.sheet_to_json) and
+// maps them onto our expense shape, matching category by name (case-insensitive) with a
+// fallback, and skipping rows that don't have a usable amount/date. Returns both the usable
+// rows and a count of skipped ones so the UI can report "imported 40, skipped 2".
+export function normalizeImportedRows(rows,categories){
+ const byName={};
+ categories.forEach(c=>{byName[c.name.trim().toLowerCase()]=c.id});
+ const fallbackCategory=categories.find(c=>!c.income)?.id||categories[0]?.id;
+ const imported=[];
+ let skipped=0;
+ rows.forEach((r,i)=>{
+  const get=(...keys)=>{for(const k of keys){for(const rk of Object.keys(r)){if(rk.trim().toLowerCase()===k)return r[rk]}}return undefined};
+  const rawDate=get('date');
+  const rawAmount=get('amount');
+  const amount=Number(rawAmount);
+  const dateStr=normalizeDate(rawDate);
+  if(!dateStr||!amount||amount<=0){skipped++;return}
+  const catName=(get('category')||'').toString().trim().toLowerCase();
+  imported.push({
+   id:'import-'+Date.now()+'-'+i,
+   date:dateStr,
+   amount,
+   category:byName[catName]||fallbackCategory,
+   description:(get('description')||'').toString(),
+   paymentMethod:(get('payment method','paymentmethod')||'Cash').toString(),
+   note:(get('note')||'').toString()
+  });
+ });
+ return {imported,skipped};
+}
+function normalizeDate(v){
+ if(!v)return null;
+ if(v instanceof Date&&!isNaN(v))return v.toISOString().slice(0,10);
+ const s=String(v).trim();
+ if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+ const parsed=new Date(s);
+ if(!isNaN(parsed))return parsed.toISOString().slice(0,10);
+ return null;
+}

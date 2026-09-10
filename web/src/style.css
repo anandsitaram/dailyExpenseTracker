@@ -193,3 +193,29 @@ header p{margin:0;color:var(--muted)}
 
 /* small inline budget input used for per-category budgets */
 .budgetInput.small{width:120px;padding:8px 10px;font-size:13px;text-align:right}
+
+/* quick-add chips (dashboard) */
+.quickAddRow{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.quickChip{display:flex;flex-direction:column;align-items:flex-start;gap:4px;background:var(--green-tint);border:1px solid var(--green);border-radius:14px;padding:10px 14px;min-width:110px;cursor:pointer}
+.quickChip:hover{filter:brightness(.97)}
+.quickChipName{font-size:13px;font-weight:700;color:var(--ink)}
+.quickChipAmount{font-size:13px;color:var(--green-dark)}
+:root[data-theme="dark"] .quickChip{background:var(--green-tint);border-color:var(--green)}
+:root[data-theme="dark"] .quickChipAmount{color:#a7d97a}
+
+/* spending streak badge (dashboard) */
+.streakBadge{display:inline-flex;align-items:center;gap:8px;background:var(--amber-tint);color:#7a4d0a;font-weight:700;font-size:13px;padding:10px 14px;border-radius:12px;margin:-4px 0 14px}
+:root[data-theme="dark"] .streakBadge{color:#f5cf94}
+
+/* month-over-month / year-over-year comparison (analytics) */
+.compareLine{display:flex;align-items:center;gap:6px;margin:4px 0}
+.compareLine.up{color:#b23b3b}
+.compareLine.down{color:var(--green-dark)}
+:root[data-theme="dark"] .compareLine.down{color:#a7d97a}
+
+/* onboarding welcome screen */
+.onboardWrap{max-width:420px;margin:8vh auto 0;padding:20px}
+.onboardEmoji{font-size:52px;text-align:center;margin-bottom:8px}
+.onboardRow{display:flex;gap:14px;align-items:flex-start;margin-bottom:22px}
+.onboardIcon{font-size:26px;line-height:1}
+.onboardWrap button{width:100%}

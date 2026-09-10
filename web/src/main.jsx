@@ -2,10 +2,10 @@ import React,{useEffect,useMemo,useState,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {PieChart,Pie,Cell,Tooltip,ResponsiveContainer,LineChart,Line,XAxis,YAxis,CartesianGrid,BarChart,Bar} from 'recharts';
 import * as XLSX from 'xlsx';
-import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses} from './shared';
+import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses,computeQuickAddSuggestions,computeStreaks,computePeriodComparison,normalizeImportedRows} from './shared';
 import {secureGet,secureSet} from './secureStorage';
 import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
-import {Home,ListChecks,Plus,PieChart as PieChartIcon,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock} from 'lucide-react';
+import {Home,ListChecks,Plus,PieChart as PieChartIcon,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock,Flame,TrendingUp,TrendingDown} from 'lucide-react';
 import './style.css';
 
 const PALETTE=['#8BC63E','#F5A623','#4C8EF7','#B98BF0','#F26D6D','#39B8A6'];
@@ -23,7 +23,8 @@ function App(){
  const [loaded,setLoaded]=useState(false);
  const [tab,setTab]=useState('dashboard'),[editing,setEditing]=useState(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('all');
  const [addPresetDate,setAddPresetDate]=useState(null);
- const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState('');
+ const [dateFrom,setDateFrom]=useState(''),[dateTo,setDateTo]=useState(''),[amountMin,setAmountMin]=useState(''),[amountMax,setAmountMax]=useState('');
+ const [onboardingDone,setOnboardingDone]=useState(true);
  const now=new Date();
  const [calYear,setCalYear]=useState(now.getFullYear());
  const [calMonth,setCalMonth]=useState(now.getMonth());
@@ -36,23 +37,23 @@ function App(){
   return()=>document.removeEventListener('visibilitychange',onVisibility);
  },[appLock.enabled]);
 
- // --- undo-on-delete snackbar (replaces an irreversible confirm dialog) ---
- const [undoState,setUndoState]=useState(null); // {item,index,kind}
+ // --- undo snackbar (used for both delete-undo and quick-add-undo) ---
+ const [undoState,setUndoState]=useState(null); // {message,onUndo}
  const undoTimer=useRef(null);
- function flashUndo(item,index,kind){
+ function flashUndo(message,onUndo){
   clearTimeout(undoTimer.current);
-  setUndoState({item,index,kind});
+  setUndoState({message,onUndo});
   undoTimer.current=setTimeout(()=>setUndoState(null),6000);
  }
  function undoLast(){
   if(!undoState)return;
-  if(undoState.kind==='expense')setExpenses(p=>{const n=p.slice();n.splice(undoState.index,0,undoState.item);return n});
+  undoState.onUndo();
   clearTimeout(undoTimer.current);setUndoState(null);
  }
 
  // Load once on mount (decrypting from IndexedDB-backed key + localStorage ciphertext).
  useEffect(()=>{(async()=>{
-  const [e,c,b,p,cb,r,al,th]=await Promise.all([
+  const [e,c,b,p,cb,r,al,th,ob]=await Promise.all([
    secureGet('det-expenses',emptyExpenses),
    secureGet('det-categories',defaultCategories),
    secureGet('det-budget',0),
@@ -60,12 +61,13 @@ function App(){
    secureGet('det-categoryBudgets',{}),
    secureGet('det-recurring',[]),
    secureGet('det-appLock',defaultAppLock),
-   secureGet('det-theme','light')
+   secureGet('det-theme','light'),
+   secureGet('det-onboardingDone',false)
   ]);
   // Catch up any recurring expenses that came due while the app was closed.
   const {newExpenses,updatedTemplates}=generateDueExpenses(r,e,today());
   const mergedExpenses=newExpenses.length?[...newExpenses,...e]:e;
-  setExpenses(mergedExpenses);setCategories(c);setBudget(Number(b)||0);setProfile({...defaultProfile,...p});setCategoryBudgets(cb);setRecurring(updatedTemplates);setAppLock({...defaultAppLock,...al});setTheme(th==='dark'?'dark':'light');setLoaded(true)
+  setExpenses(mergedExpenses);setCategories(c);setBudget(Number(b)||0);setProfile({...defaultProfile,...p});setCategoryBudgets(cb);setRecurring(updatedTemplates);setAppLock({...defaultAppLock,...al});setTheme(th==='dark'?'dark':'light');setOnboardingDone(!!ob);setLoaded(true)
  })()},[]);
  // Guarded by `loaded` so we never encrypt-and-overwrite storage with the initial
  // placeholder state before the real data has finished loading.
@@ -76,6 +78,7 @@ function App(){
  useEffect(()=>{if(loaded)secureSet('det-categoryBudgets',categoryBudgets).catch(console.error)},[categoryBudgets,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-recurring',recurring).catch(console.error)},[recurring,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-appLock',appLock).catch(console.error)},[appLock,loaded]);
+ useEffect(()=>{if(loaded)secureSet('det-onboardingDone',onboardingDone).catch(console.error)},[onboardingDone,loaded]);
  useEffect(()=>{
   document.documentElement.dataset.theme=theme;
   if(loaded)secureSet('det-theme',theme).catch(console.error);
@@ -96,11 +99,17 @@ function App(){
    &&(filter==='all'||e.category===filter)
    &&(!dateFrom||e.date>=dateFrom)
    &&(!dateTo||e.date<=dateTo)
+   &&(!amountMin||Number(e.amount)>=Number(amountMin))
+   &&(!amountMax||Number(e.amount)<=Number(amountMax))
   ).sort((a,b)=>b.date.localeCompare(a.date));
- const dateFilterActive=dateFrom||dateTo;
+ const dateFilterActive=dateFrom||dateTo||amountMin||amountMax;
  const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
 
  const spendByDay=useMemo(()=>{const m={};expenses.forEach(e=>{m[e.date]=(m[e.date]||0)+Number(e.amount)});return m},[expenses]);
+ // Chips of things you've logged more than once, so adding them again is one click.
+ const quickAdd=useMemo(()=>computeQuickAddSuggestions(expenses,6),[expenses]);
+ const streaks=useMemo(()=>computeStreaks(expenses,today()),[expenses]);
+ const comparison=useMemo(()=>computePeriodComparison(expenses,categories,today()),[expenses,categories]);
 
  function saveExpense(x,repeat){
   if(!editing&&repeat&&repeat!=='none'){
@@ -117,9 +126,16 @@ function App(){
   setExpenses(p=>{
    const index=p.findIndex(e=>e.id===id);
    if(index===-1)return p;
-   flashUndo(p[index],index,'expense');
+   const item=p[index];
+   flashUndo('Expense deleted',()=>setExpenses(prev=>{const n=prev.slice();n.splice(index,0,item);return n}));
    return p.filter(e=>e.id!==id);
   });
+ }
+ // One click to re-log something you've bought before (Chai, auto fare, etc.) - no form at all.
+ function addQuickExpense(sugg){
+  const newExpense={id:Date.now().toString(),amount:sugg.amount,description:sugg.description,date:today(),category:sugg.category,paymentMethod:sugg.paymentMethod,note:''};
+  setExpenses(p=>[newExpense,...p]);
+  flashUndo(`Added ${sugg.description} · ${formatINR(sugg.amount)}`,()=>setExpenses(p=>p.filter(e=>e.id!==newExpense.id)));
  }
  function startAdd(presetDate){setEditing(null);setAddPresetDate(presetDate||null);setTab('add')}
  function startEdit(x){setEditing(x);setAddPresetDate(null);setTab('add')}
@@ -174,10 +190,41 @@ function App(){
   reader.readAsText(file);
   e.target.value='';
  }
+ // CSV/Excel import for migrating from a spreadsheet - reuses the same xlsx library already
+ // used for export, which can read both .xlsx and .csv from the same file input.
+ function importSpreadsheet(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+   let imported,skipped;
+   try{
+    const wb=XLSX.read(reader.result,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{raw:false,defval:''});
+    ({imported,skipped}=normalizeImportedRows(rows,categories));
+   }catch(err){
+    alert('Could not read that file - make sure it\u2019s a .csv or .xlsx with a header row including at least Date and Amount.');
+    e.target.value='';return;
+   }
+   if(!imported.length){
+    alert(skipped?`All ${skipped} row(s) were skipped - check the Date and Amount columns.`:'No rows were found in that file.');
+    e.target.value='';return;
+   }
+   const proceed=confirm(`Import ${imported.length} expense${imported.length===1?'':'s'}?`+(skipped?` ${skipped} row(s) will be skipped due to a missing/invalid amount or date.`:'')+' This adds to your existing expenses - nothing will be overwritten.');
+   if(proceed){
+    setExpenses(p=>[...imported,...p]);
+    alert(`Imported ${imported.length} expense${imported.length===1?'':'s'}.`);
+   }
+   e.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+ }
 
  if(!loaded)return <div className="app"><main style={{padding:40}}>Loading your data…</main></div>;
 
  if(appLock.enabled&&!unlocked)return <LockScreen appLock={appLock} onUnlock={()=>setUnlocked(true)}/>;
+
+ if(!onboardingDone)return <Onboarding onDone={()=>setOnboardingDone(true)}/>;
 
  return <div className="app">
   <aside>
@@ -204,6 +251,19 @@ function App(){
      <Metric title="Top category" value={top?.name||'—'}/>
     </section>
     {budget<=0&&<p className="hint" style={{marginTop:-10,marginBottom:14}}><button className="mini" onClick={()=>setTab('budget')}>Set a monthly budget</button> to see your remaining balance.</p>}
+    {streaks.current>=2&&<div className="streakBadge"><Flame size={16}/> {streaks.current}-day logging streak{streaks.longest>streaks.current?` · best ${streaks.longest}`:''}</div>}
+    {quickAdd.length>0&&<Panel title="Quick add">
+     <div className="quickAddRow">
+      {quickAdd.map((q,i)=>{
+       const c=categories.find(c=>c.id===q.category);
+       return <button key={i} className="quickChip" onClick={()=>addQuickExpense(q)} aria-label={`Add ${q.description}, ${formatINR(q.amount)}`}>
+        <span className="quickChipName">{c?.icon||'📦'} {q.description}</span>
+        <span className="quickChipAmount">{formatINR(q.amount)}</span>
+       </button>
+      })}
+     </div>
+     <p className="hint">Things you've logged more than once - click to add again with today's date.</p>
+    </Panel>}
     <div className="grid">
      <Panel title="Spending trend">{daily.length?<Trend data={daily}/>:<EmptyState icon="📈" text="No spending yet this month."/>}</Panel>
      <Panel title="Category breakdown">{byCat.length?<Donut data={byCat}/>:<EmptyState icon="📊" text="No spending yet this month."/>}</Panel>
@@ -236,7 +296,9 @@ function App(){
      </select>
      <label className="inlineDate">From<input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label>
      <label className="inlineDate">To<input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label>
-     {dateFilterActive&&<button className="mini" onClick={()=>{setDateFrom('');setDateTo('')}}>Clear dates</button>}
+     <label className="inlineDate">Min ₹<input type="number" value={amountMin} onChange={e=>setAmountMin(e.target.value)} placeholder="0" style={{width:80}}/></label>
+     <label className="inlineDate">Max ₹<input type="number" value={amountMax} onChange={e=>setAmountMax(e.target.value)} placeholder="No limit" style={{width:80}}/></label>
+     {dateFilterActive&&<button className="mini" onClick={()=>{setDateFrom('');setDateTo('');setAmountMin('');setAmountMax('')}}>Clear filters</button>}
      {expenses.length>0&&<>
       <button onClick={exportCSV}>Export CSV</button>
       <button onClick={exportExcel}>Export Excel</button>
@@ -255,6 +317,19 @@ function App(){
    {tab==='add'&&<ExpenseForm key={editing?editing.id:('new-'+(addPresetDate||''))} initial={editing} presetDate={addPresetDate} cats={categories} allExpenses={expenses} onEditExpense={startEdit} onDeleteExpense={remove} onCancel={()=>setTab('expenses')} onSave={saveExpense}/>}
 
    {tab==='analytics'&&<>
+    <Panel title="This month vs last month">
+     <div className="budgetMeta"><b>This month</b><span>{formatINR(comparison.curTotal)}</span></div>
+     <div className="budgetMeta"><span className="hint" style={{margin:0}}>Last month</span><span className="hint" style={{margin:0}}>{formatINR(comparison.prevTotal)}</span></div>
+     {comparison.momPct===null?
+      <p className="hint">Not enough history yet to compare to last month.</p>:
+      <p className={'hint compareLine'+(comparison.momPct>0?' up':comparison.momPct<0?' down':'')}>
+       {comparison.momPct>0?<TrendingUp size={14}/>:comparison.momPct<0?<TrendingDown size={14}/>:null} {Math.abs(comparison.momPct).toFixed(0)}% vs last month
+      </p>}
+     {comparison.yoyPct!==null&&
+      <p className={'hint compareLine'+(comparison.yoyPct>0?' up':comparison.yoyPct<0?' down':'')}>
+       {comparison.yoyPct>0?<TrendingUp size={14}/>:comparison.yoyPct<0?<TrendingDown size={14}/>:null} {Math.abs(comparison.yoyPct).toFixed(0)}% vs {monthNames[Number(comparison.lastYearMonth.slice(5,7))-1]} last year
+      </p>}
+    </Panel>
     <div className="grid">
      <Panel title="Category spending">{byCat.length?<Donut data={byCat}/>:<EmptyState icon="📊" text="No spending yet this month. Add an expense to see the breakdown."/>}</Panel>
      <Panel title="Daily spending">{daily.length?<Trend data={daily}/>:<EmptyState icon="📅" text="No spending yet this month."/>}</Panel>
@@ -301,6 +376,10 @@ function App(){
      </div>
     </Panel>
     <AppLockPanel appLock={appLock} setAppLock={setAppLock} onUnlockNow={()=>setUnlocked(true)}/>
+    <Panel title="Import from spreadsheet">
+     <p className="hint" style={{margin:'0 0 14px'}}>Migrating from a spreadsheet? Upload a .csv or .xlsx file with Date, Amount, Category, Description, Payment Method, and Note columns (column order doesn't matter, and Category is matched by name).</p>
+     <label className="mini fileBtn btnRow"><Upload size={14}/> Choose file to import<input type="file" accept=".csv,.xlsx,.xls" style={{display:'none'}} onChange={importSpreadsheet}/></label>
+    </Panel>
     <Panel title="Backup & restore">
      <p className="hint" style={{margin:'0 0 14px'}}>This app keeps everything private in your browser only - there's no account or cloud sync. That means clearing browser data (or reinstalling on mobile) can erase your data. Export a backup first, then restore it here whenever you need to bring your data back.</p>
      <label className="wide">Backup password<input type="password" value={backupPassword} onChange={e=>setBackupPassword(e.target.value)} placeholder="At least 4 characters"/></label>
@@ -316,7 +395,7 @@ function App(){
    </>}
   </main>
   {undoState&&<div className="snackbar">
-   <span>{undoState.kind==='expense'?'Expense deleted':'Item deleted'}</span>
+   <span>{undoState.message}</span>
    <button className="mini" onClick={undoLast}>Undo</button>
   </div>}
  </div>
@@ -339,6 +418,29 @@ function LockScreen({appLock,onUnlock}){
     {!!error&&<p className="hint" style={{color:'#b23b3b'}}>{error}</p>}
     <button className="primary" style={{marginTop:14}}>Unlock</button>
    </form>
+  </div>
+ </div>
+}
+
+function Onboarding({onDone}){
+ return <div className="app" style={{display:'block'}}>
+  <div className="onboardWrap">
+   <div className="onboardEmoji">💰</div>
+   <h1 style={{textAlign:'center'}}>Welcome to Daily Expense Tracker</h1>
+   <p className="hint" style={{textAlign:'center',marginBottom:26}}>A few things before you start:</p>
+   <div className="onboardRow">
+    <span className="onboardIcon">✍️</span>
+    <div><b>Log expenses in seconds</b><p className="hint">Click a date on the calendar, or the Add expense button, to add one. No account or setup needed.</p></div>
+   </div>
+   <div className="onboardRow">
+    <span className="onboardIcon">🎯</span>
+    <div><b>Set a budget anytime</b><p className="hint">See exactly what's left to spend this month, overall or per category.</p></div>
+   </div>
+   <div className="onboardRow">
+    <span className="onboardIcon">🔒</span>
+    <div><b>Everything stays private</b><p className="hint">Your data is encrypted in this browser and never leaves it unless you export a backup yourself.</p></div>
+   </div>
+   <button className="primary" style={{marginTop:16}} onClick={onDone}>Get started</button>
   </div>
  </div>
 }

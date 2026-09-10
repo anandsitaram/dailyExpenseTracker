@@ -1,7 +1,8 @@
 import {
  formatINR, total, buildCalendarGrid, dateKey, nextDueDate, generateDueExpenses,
  isValidPin, isEncryptedBackupText, buildBackupPayload, parseBackupPayload,
- isIncomeCategory, defaultCategories, toExpenseRows
+ isIncomeCategory, defaultCategories, toExpenseRows,
+ computeQuickAddSuggestions, computeStreaks, computePeriodComparison, normalizeImportedRows
 } from '../shared';
 
 describe('formatINR', () => {
@@ -159,5 +160,154 @@ describe('toExpenseRows', () => {
   const rows = toExpenseRows([{date: '2026-09-01', amount: 200, category: 'food', description: 'Lunch', paymentMethod: 'UPI', note: ''}], defaultCategories);
   expect(rows[0].Category).toBe('Food');
   expect(rows[0].Amount).toBe(200);
+ });
+});
+
+describe('computeQuickAddSuggestions', () => {
+ test('only surfaces an (description, category, amount) combo logged 2+ times', () => {
+  const expenses = [
+   {description: 'Chai', category: 'food', amount: 10, date: '2026-09-01', paymentMethod: 'Cash'},
+   {description: 'Chai', category: 'food', amount: 10, date: '2026-09-02', paymentMethod: 'Cash'},
+   {description: 'One-off', category: 'other', amount: 500, date: '2026-09-01', paymentMethod: 'UPI'},
+  ];
+  const suggestions = computeQuickAddSuggestions(expenses);
+  expect(suggestions).toHaveLength(1);
+  expect(suggestions[0]).toMatchObject({description: 'Chai', category: 'food', amount: 10, count: 2});
+ });
+ test('sorts by frequency, then recency', () => {
+  const expenses = [
+   {description: 'A', category: 'food', amount: 10, date: '2026-09-01', paymentMethod: 'Cash'},
+   {description: 'A', category: 'food', amount: 10, date: '2026-09-02', paymentMethod: 'Cash'},
+   {description: 'B', category: 'food', amount: 20, date: '2026-09-01', paymentMethod: 'Cash'},
+   {description: 'B', category: 'food', amount: 20, date: '2026-09-02', paymentMethod: 'Cash'},
+   {description: 'B', category: 'food', amount: 20, date: '2026-09-03', paymentMethod: 'Cash'},
+  ];
+  const suggestions = computeQuickAddSuggestions(expenses);
+  expect(suggestions[0].description).toBe('B'); // 3 occurrences beats 2
+ });
+ test('respects the limit', () => {
+  const expenses = [];
+  for (let i = 0; i < 10; i++) {
+   expenses.push({description: 'X' + i, category: 'food', amount: 10, date: '2026-09-01', paymentMethod: 'Cash'});
+   expenses.push({description: 'X' + i, category: 'food', amount: 10, date: '2026-09-02', paymentMethod: 'Cash'});
+  }
+  expect(computeQuickAddSuggestions(expenses, 3)).toHaveLength(3);
+ });
+ test('ignores entries with a blank description', () => {
+  const expenses = [
+   {description: '', category: 'food', amount: 10, date: '2026-09-01', paymentMethod: 'Cash'},
+   {description: '', category: 'food', amount: 10, date: '2026-09-02', paymentMethod: 'Cash'},
+  ];
+  expect(computeQuickAddSuggestions(expenses)).toEqual([]);
+ });
+});
+
+describe('computeStreaks', () => {
+ test('counts a current streak that includes today', () => {
+  const expenses = [{date: '2026-09-06'}, {date: '2026-09-07'}, {date: '2026-09-08'}];
+  expect(computeStreaks(expenses, '2026-09-08').current).toBe(3);
+ });
+ test('still counts yesterday-ending streak even if nothing logged yet today', () => {
+  const expenses = [{date: '2026-09-06'}, {date: '2026-09-07'}];
+  expect(computeStreaks(expenses, '2026-09-08').current).toBe(2);
+ });
+ test('a gap resets the current streak to 0', () => {
+  const expenses = [{date: '2026-09-01'}, {date: '2026-09-02'}];
+  expect(computeStreaks(expenses, '2026-09-08').current).toBe(0);
+ });
+ test('tracks the longest streak separately from the current one', () => {
+  const expenses = [
+   {date: '2026-09-01'}, {date: '2026-09-02'}, {date: '2026-09-03'}, {date: '2026-09-04'}, // streak of 4
+   {date: '2026-09-08'} // isolated day, current streak
+  ];
+  const {current, longest} = computeStreaks(expenses, '2026-09-08');
+  expect(current).toBe(1);
+  expect(longest).toBe(4);
+ });
+ test('handles no expenses at all', () => {
+  expect(computeStreaks([], '2026-09-08')).toEqual({current: 0, longest: 0});
+ });
+ test('duplicate expenses on the same day still only count once', () => {
+  const expenses = [{date: '2026-09-08'}, {date: '2026-09-08'}, {date: '2026-09-08'}];
+  expect(computeStreaks(expenses, '2026-09-08').current).toBe(1);
+ });
+});
+
+describe('computePeriodComparison', () => {
+ const cats = defaultCategories;
+ test('computes month-over-month % increase correctly', () => {
+  const expenses = [
+   {date: '2026-08-10', amount: 1000, category: 'food'}, // prev month
+   {date: '2026-09-10', amount: 1500, category: 'food'}, // current month
+  ];
+  const r = computePeriodComparison(expenses, cats, '2026-09-15');
+  expect(r.prevTotal).toBe(1000);
+  expect(r.curTotal).toBe(1500);
+  expect(r.momPct).toBe(50);
+ });
+ test('computes year-over-year % change correctly', () => {
+  const expenses = [
+   {date: '2025-09-10', amount: 2000, category: 'food'}, // same month, last year
+   {date: '2026-09-10', amount: 1000, category: 'food'}, // this year
+  ];
+  const r = computePeriodComparison(expenses, cats, '2026-09-15');
+  expect(r.lastYearTotal).toBe(2000);
+  expect(r.yoyPct).toBe(-50);
+ });
+ test('returns null (not a number) when there is nothing to compare against', () => {
+  const expenses = [{date: '2026-09-10', amount: 500, category: 'food'}];
+  const r = computePeriodComparison(expenses, cats, '2026-09-15');
+  expect(r.momPct).toBeNull();
+ });
+ test('handles the January boundary (previous month rolls back a year)', () => {
+  const expenses = [
+   {date: '2025-12-10', amount: 800, category: 'food'},
+   {date: '2026-01-10', amount: 900, category: 'food'},
+  ];
+  const r = computePeriodComparison(expenses, cats, '2026-01-15');
+  expect(r.prevMonth).toBe('2025-12');
+  expect(r.prevTotal).toBe(800);
+ });
+ test('excludes income categories from the comparison', () => {
+  const expenses = [
+   {date: '2026-09-10', amount: 50000, category: 'salary'},
+   {date: '2026-09-10', amount: 500, category: 'food'},
+  ];
+  const r = computePeriodComparison(expenses, cats, '2026-09-15');
+  expect(r.curTotal).toBe(500);
+ });
+});
+
+describe('normalizeImportedRows', () => {
+ const cats = defaultCategories;
+ test('maps a well-formed row onto the expense shape', () => {
+  const rows = [{Date: '2026-09-01', Amount: '250', Category: 'Food', Description: 'Lunch', 'Payment Method': 'UPI', Note: ''}];
+  const {imported, skipped} = normalizeImportedRows(rows, cats);
+  expect(skipped).toBe(0);
+  expect(imported[0]).toMatchObject({date: '2026-09-01', amount: 250, category: 'food', description: 'Lunch', paymentMethod: 'UPI'});
+ });
+ test('is case-insensitive on both column headers and category names', () => {
+  const rows = [{date: '2026-09-01', amount: '100', category: 'FOOD'}];
+  const {imported} = normalizeImportedRows(rows, cats);
+  expect(imported[0].category).toBe('food');
+ });
+ test('falls back to a default category when the name does not match', () => {
+  const rows = [{Date: '2026-09-01', Amount: '100', Category: 'Nonexistent Category'}];
+  const {imported} = normalizeImportedRows(rows, cats);
+  expect(imported[0].category).toBe(cats.find(c => !c.income).id);
+ });
+ test('skips rows with a missing or zero amount', () => {
+  const rows = [
+   {Date: '2026-09-01', Amount: '0', Category: 'Food'},
+   {Date: '2026-09-01', Category: 'Food'},
+  ];
+  const {imported, skipped} = normalizeImportedRows(rows, cats);
+  expect(imported).toEqual([]);
+  expect(skipped).toBe(2);
+ });
+ test('skips rows with an unparseable date', () => {
+  const rows = [{Date: 'not a date', Amount: '100', Category: 'Food'}];
+  const {skipped} = normalizeImportedRows(rows, cats);
+  expect(skipped).toBe(1);
  });
 });
