@@ -5,17 +5,9 @@ A simple, private, and fast way to track **where your money actually goes** — 
 ## 🚀 Try it
 
 - **Web app:** [my-daily-expense-tracker.vercel.app](https://my-daily-expense-tracker.vercel.app/)
-- **Mobile app:** Coming soon
+- **Mobile app:** Coming soon (Check Screenshots below)
 
 ## 📸 Screenshots
-
-### Dashboard
-
-![Daily Expense Tracker dashboard](docs/screenshots/dashboard.png)
-
-### Analytics
-
-![Daily Expense Tracker analytics](docs/screenshots/analytics.png)
 
 ### Mobile preview
 
@@ -23,7 +15,9 @@ These mobile-sized previews show the responsive web app. The native Android app 
 
 | Dashboard | Expenses |
 | --- | --- |
-| ![Daily Expense Tracker mobile dashboard](docs/screenshots/mobile-dashboard.png) | ![Daily Expense Tracker mobile expenses](docs/screenshots/mobile-expenses.png) |
+| ![Daily Expense Tracker mobile dashboard](screenshots/Screenshot_1789061627.png) | ![Daily Expense Tracker mobile expenses](screenshots/Screenshot_1789061636.png) |
+| ![Daily Expense Tracker mobile dashboard](screenshots/Screenshot_1789061696.png) | ![Daily Expense Tracker mobile expenses](screenshots/Screenshot_1789061710.png) |
+
 
 ### Native Android
 
