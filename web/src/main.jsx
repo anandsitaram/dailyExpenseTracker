@@ -240,7 +240,7 @@ function App(){
      <div className="avatarPreview small">{profile.avatarImage?<img src={profile.avatarImage} alt="Profile"/>:<span>{profile.avatar||'🙂'}</span>}</div>
      <div><div className="eyebrow">PERSONAL FINANCE</div><h1>{tab==='dashboard'?(profile.nickName?`Hi ${profile.nickName} 👋`:'Hi there! 👋'):tab[0].toUpperCase()+tab.slice(1)}</h1><p>Track everyday spending without the clutter.</p></div>
     </div>
-    <div className="headerActions"><button className="primary btnRow" onClick={()=>startAdd()}><Plus size={16}/> Add expense</button></div>
+    <div className="headerActions"><button className="primary btnRow" aria-label="Open add expense form" onClick={()=>startAdd()}><Plus size={16}/> Add expense</button></div>
    </header>
 
    {tab==='dashboard'&&<>
@@ -447,15 +447,20 @@ function Onboarding({onDone}){
 
 function AppLockPanel({appLock,setAppLock,onUnlockNow}){
  const [showSetup,setShowSetup]=useState(false),[pinDraft,setPinDraft]=useState(''),[pinConfirm,setPinConfirm]=useState('');
+ function persistLock(nextLock){
+  setAppLock(nextLock);
+  secureSet('det-appLock',nextLock).catch(console.error);
+ }
  function savePin(){
   if(!isValidPin(pinDraft))return alert('Use a 4-6 digit PIN');
   if(pinDraft!==pinConfirm)return alert("PINs don't match");
-  setAppLock({enabled:true,mode:'pin',pin:pinDraft});
+  persistLock({enabled:true,mode:'pin',pin:pinDraft});
   setPinDraft('');setPinConfirm('');setShowSetup(false);
  }
  function turnOff(){
   if(!confirm('Turn off app lock? Anyone who opens this browser tab will be able to see your data.'))return;
-  setAppLock(defaultAppLock);onUnlockNow();
+  persistLock(defaultAppLock);
+  onUnlockNow();
  }
  return <Panel title="App lock">
   {appLock.enabled?<>

@@ -6,7 +6,9 @@ dist/
 # Web build output
 web/dist/
 mobile/android
+mobile/ios
 mobile/.idea
+/test-results/
 
 # Android build artifacts (mobile/android itself IS committed - it's a hand-maintained bare RN project)
 mobile/android/app/build/
