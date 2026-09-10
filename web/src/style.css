@@ -1,42 +1,45 @@
 :root{
- --bg:#F3F5EE;
+ --bg:#F6F8F5;
  --card:#FFFFFF;
- --border:#EAEDE3;
- --ink:#14171A;
- --muted:#7C8577;
- --muted-2:#9CA396;
- --green:#8BC63E;
- --green-dark:#6FA82C;
- --green-tint:#EEF7E1;
- --amber:#F5A623;
- --amber-tint:#FEF3E0;
- --dark:#151717;
- --radius:20px;
+ --border:#DDE5DE;
+ --ink:#203027;
+ --muted:#68736A;
+ --muted-2:#8A948C;
+ --green:#3F7D4A;
+ --green-dark:#356A3E;
+ --green-tint:#EAF3EA;
+ --amber:#D6A84F;
+ --amber-tint:#FBF3E1;
+ --dark:#203027;
+ --radius:18px;
  --radius-sm:12px;
- --shadow:0 8px 24px rgba(20,23,17,.05);
+ --shadow:0 8px 24px rgba(32,48,39,.055);
 }
 :root[data-theme="dark"]{
- --bg:#14161a;
- --card:#1c1f24;
- --border:#2c3038;
- --ink:#EDEFE9;
- --muted:#9aa39c;
- --muted-2:#7d867f;
- --green:#8BC63E;
- --green-dark:#6FA82C;
- --green-tint:#243421;
- --amber:#F5A623;
- --amber-tint:#3a2c0e;
- --dark:#0c0d0f;
+ --bg:#121814;
+ --card:#1B241E;
+ --border:#2B382E;
+ --ink:#F0F5F1;
+ --muted:#AAB6AD;
+ --muted-2:#819087;
+ --green:#76B582;
+ --green-dark:#8BCF98;
+ --green-tint:#243528;
+ --amber:#E0B65D;
+ --amber-tint:#3B311C;
+ --dark:#0F1712;
  --shadow:0 8px 24px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
-button{border:0;border-radius:var(--radius-sm);padding:11px 16px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-weight:600;transition:filter .15s}
+button{border:0;border-radius:var(--radius-sm);padding:11px 16px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-weight:650;transition:transform .15s,filter .15s,box-shadow .15s}
+button:active{transform:translateY(1px)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--green) 25%,transparent);outline-offset:2px}
+input::placeholder,textarea::placeholder{color:var(--muted-2)}
 button:hover{filter:brightness(.97)}
 .primary{background:var(--dark);color:#fff;border-color:var(--dark)}
-.accent{background:var(--green);color:#0e1a06;border-color:var(--green)}
+.accent{background:var(--green);color:#fff;border-color:var(--green);box-shadow:0 6px 16px rgba(63,125,74,.18)}
 
 .app{display:flex;min-height:100vh}
 aside{width:236px;background:var(--card);border-right:1px solid var(--border);padding:24px 16px;position:fixed;height:100vh;display:flex;flex-direction:column}
