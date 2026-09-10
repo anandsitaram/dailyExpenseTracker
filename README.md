@@ -2,6 +2,33 @@
 
 A simple, private, and fast way to track **where your money actually goes** — every day, without the spreadsheet effort.
 
+## 🚀 Try it
+
+- **Web app:** [my-daily-expense-tracker.vercel.app](https://my-daily-expense-tracker.vercel.app/)
+- **Mobile app:** Coming soon
+
+## 📸 Screenshots
+
+### Dashboard
+
+![Daily Expense Tracker dashboard](docs/screenshots/dashboard.png)
+
+### Analytics
+
+![Daily Expense Tracker analytics](docs/screenshots/analytics.png)
+
+### Mobile preview
+
+These mobile-sized previews show the responsive web app. The native Android app is also available for testing, with the current emulator screen shown below.
+
+| Dashboard | Expenses |
+| --- | --- |
+| ![Daily Expense Tracker mobile dashboard](docs/screenshots/mobile-dashboard.png) | ![Daily Expense Tracker mobile expenses](docs/screenshots/mobile-expenses.png) |
+
+### Native Android
+
+![Daily Expense Tracker native Android home screen](docs/screenshots/native-mobile-home.png)
+
 ## 📖 Why this exists
 
 For a middle-class household, every rupee has a job — rent, groceries, fuel, school fees, EMIs, the occasional treat. But most people don't track spending daily because it feels tedious: opening a spreadsheet, remembering categories, calculating totals by hand. By the time the credit card bill arrives, it's too late to course-correct.
@@ -74,19 +101,6 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 - Clean bottom/side navigation with dedicated Home, Expenses, Add, Analytics, Budget, Categories, and Profile screens
 - Empty states and hints throughout that guide you toward entering real data, instead of showing confusing sample numbers
 - Light and dark appearance (web)
-
-```
-## ✅ Testing
-
-Unit tests cover the shared logic (calendar math, recurring-expense generation, backup parsing, PIN validation) and run on both platforms:
-
-```bash
-# Web (Vitest) — from the repo root
-npm test
-
-# Mobile (Jest) — from mobile/
-cd mobile && npm test
-```
 
 ## 🔒 Storage & privacy
 
