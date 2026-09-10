@@ -15,13 +15,9 @@ These mobile-sized previews show the responsive web app. The native Android app 
 
 | Dashboard | Expenses |
 | --- | --- |
-| ![Daily Expense Tracker mobile dashboard](screenshots/Screenshot_1789061627.png) | ![Daily Expense Tracker mobile expenses](screenshots/Screenshot_1789061636.png) |
-| ![Daily Expense Tracker mobile dashboard](screenshots/Screenshot_1789061696.png) | ![Daily Expense Tracker mobile expenses](screenshots/Screenshot_1789061710.png) |
+| <img src="screenshots/Screenshot_1789061627.png" alt="Daily Expense Tracker mobile dashboard" width="180"> | <img src="screenshots/Screenshot_1789061636.png" alt="Daily Expense Tracker mobile expenses" width="180"> |
+| <img src="screenshots/Screenshot_1789061696.png" alt="Daily Expense Tracker mobile dashboard" width="180"> | <img src="screenshots/Screenshot_1789061710.png" alt="Daily Expense Tracker mobile expenses" width="180"> |
 
-
-### Native Android
-
-![Daily Expense Tracker native Android home screen](docs/screenshots/native-mobile-home.png)
 
 ## 📖 Why this exists
 
