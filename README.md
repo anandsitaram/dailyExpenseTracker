@@ -75,77 +75,7 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 - Empty states and hints throughout that guide you toward entering real data, instead of showing confusing sample numbers
 - Light and dark appearance (web)
 
-## 🧭 Application screens
-
-**Web:** Dashboard · Expenses · Add/Edit Expense · Analytics · Budget · Categories · Profile
-
-**Mobile:** Home · Expenses · Add · Analytics · Budget · Categories · Profile
-
-## 🏗️ Project structure
-
-```text
-dailyExpenseTracker/
-├── mobile/
-│   ├── App.js
-│   ├── shared.js
-│   ├── secureStorage.js
-│   ├── backupCrypto.js
-│   ├── appLock.js
-│   ├── __tests__/
-│   │   └── shared.test.js
-│   ├── android/
-│   ├── ios/
-│   └── package.json
-│
-├── web/
-│   └── src/
-│       ├── main.jsx
-│       ├── shared.js
-│       ├── secureStorage.js
-│       ├── backupCrypto.js
-│       ├── style.css
-│       └── __tests__/
-│           └── shared.test.js
-│
-├── e2e/
-│   └── smoke.spec.js
-├── docs/
-│   └── PRIVACY_POLICY.md
-├── .github/workflows/ci.yml
-├── playwright.config.js
-├── index.html
-├── package.json          # also runs the web app — see note below
-└── README.md
 ```
-> **Note:** the web app's `package.json` lives at the **repository root**, not inside `web/` — always run web commands (`npm install`, `npm run dev`, `npm test`) from the repo root. The mobile app has its own separate `package.json` inside `mobile/`.
-
-## 🖥️ Run the web app
-
-Requirements: Node.js 18+
-
-```bash
-npm install
-npm run dev
-```
-
-Open the URL shown in the terminal.
-
-## 📱 Run the mobile app
-
-Requirements: Node.js 18+, and for native builds, Xcode (iOS) and/or Android Studio (Android)
-
-```bash
-cd mobile
-npm install
-
-# iOS (macOS only)
-cd ios && pod install && cd ..
-npx react-native run-ios
-
-# Android
-npx react-native run-android
-```
-
 ## ✅ Testing
 
 Unit tests cover the shared logic (calendar math, recurring-expense generation, backup parsing, PIN validation) and run on both platforms:
@@ -158,8 +88,6 @@ npm test
 cd mobile && npm test
 ```
 
-A Playwright end-to-end smoke test (`e2e/smoke.spec.js`) covers the empty-state dashboard, adding an expense, the calendar → Add-expense flow, and the app-lock PIN flow. Run it with `npx playwright install --with-deps chromium && npx playwright test` from the repo root. All of the above run automatically on every push via GitHub Actions (`.github/workflows/ci.yml`). A Detox-based E2E suite for the native mobile app is a planned addition, not yet included.
-
 ## 🔒 Storage & privacy
 
 This app is intentionally backend-free — there is no server, no database, and no account behind it. Everything you enter stays encrypted on your own device:
@@ -167,11 +95,6 @@ This app is intentionally backend-free — there is no server, no database, and 
 - **Web** → data is encrypted with a non-extractable key stored in the browser, ciphertext kept in `localStorage`
 - **Mobile** → data is encrypted with a key stored in the device's Keychain (iOS) or Keystore (Android), ciphertext kept in `AsyncStorage`
 
-Because nothing is stored anywhere else, an app reinstall, a browser data reset, or a new device will not carry your data forward automatically — use the built-in **Backup & Restore** feature to export a backup first and restore it afterward. Backup files are separately encrypted with a password you choose (PBKDF2 + AES), independent of the at-rest encryption above, since a backup file is meant to leave the device. See [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) for the full policy.
-
-## 💳 A note on "payment method"
-
-There is no real payment processing in this app. "Payment method" simply records *how* you paid for something you already spent money on — Cash, UPI, Credit Card, Debit Card, or Bank Transfer — purely for your own tracking.
 
 ## 🎯 The goal
 
