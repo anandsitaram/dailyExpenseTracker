@@ -232,7 +232,6 @@ function App(){
    <div className="nav">{[['dashboard',Home,'Dashboard'],['expenses',ListChecks,'Expenses'],['analytics',PieChartIcon,'Analytics'],['budget',Target,'Budget'],['categories',Tags,'Categories'],['profile',User,'Profile']].map(([key,Icon,label])=>
     <button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}><Icon size={17} strokeWidth={2.2}/>{label}</button>)}
    </div>
-   <div className="sideCard"><h4>Upgrade to Pro</h4><p>Full history sync & insights.</p><button className="accent" style={{width:'100%'}}>Upgrade now</button></div>
   </aside>
   <main>
    <header>
