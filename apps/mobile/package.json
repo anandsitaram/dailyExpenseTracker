@@ -17,8 +17,6 @@
     "lucide-react-native": "^1.43.0",
     "react": "18.2.0",
     "react-native": "0.74.5",
-      "@babel/runtime": "^7.28.0",
-
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "2.16.2",
     "react-native-get-random-values": "^1.11.0",
@@ -31,7 +29,7 @@
     "@babel/core": "^7.20.0",
     "@babel/eslint-parser": "^7.20.0",
     "@babel/preset-env": "^7.20.0",
-    "@babel/runtime": "^7.20.0",
+    "@babel/runtime": "^7.29.7",
     "@react-native/babel-preset": "0.74.87",
     "@react-native/metro-config": "0.74.87",
     "babel-jest": "^29.7.0",
