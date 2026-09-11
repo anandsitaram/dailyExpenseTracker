@@ -22,12 +22,17 @@ import {
   dateKey,
   buildCalendarGrid,
   isIncomeCategory,
+  paymentMethods,
   recurringFrequencies,
   frequencyLabels,
   avatarChoices,
+  defaultAppLock,
+  isValidPin,
+  todayDateKey,
 } from '../../../../packages/core/src/index.js';
+import { secureSet } from '../services/storage.js';
 const PALETTE = ['#8BC63E', '#F5A623', '#4C8EF7', '#B98BF0', '#F26D6D', '#39B8A6'];
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayDateKey;
 function LockScreen({ appLock, onUnlock }) {
   const [pin, setPin] = useState(''),
     [error, setError] = useState('');
