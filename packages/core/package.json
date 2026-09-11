@@ -1,0 +1,13 @@
+{
+  "name": "@daily-expense-tracker/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/types.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./backupCrypto": "./src/backupCrypto.js",
+    "./types": "./src/types.ts"
+  }
+}

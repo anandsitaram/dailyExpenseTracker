@@ -1,10 +1,9 @@
-import { describe, test, expect } from 'vitest';
 import {
  formatINR, total, buildCalendarGrid, dateKey, nextDueDate, generateDueExpenses,
  isValidPin, isEncryptedBackupText, buildBackupPayload, parseBackupPayload,
  isIncomeCategory, defaultCategories, toExpenseRows,
  computeQuickAddSuggestions, computeStreaks, computePeriodComparison, normalizeImportedRows
-} from '../shared.js';
+} from '../../packages/core/src/index.js';
 
 describe('formatINR', () => {
  test('formats a positive amount as INR with no decimals', () => {

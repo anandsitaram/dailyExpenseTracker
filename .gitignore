@@ -4,22 +4,22 @@ dist/
 .DS_Store
 
 # Web build output
-web/dist/
-mobile/.idea
+apps/web/dist/
+apps/mobile/.idea
 /test-results/
 
 # Android build artifacts (mobile/android itself IS committed - it's a hand-maintained bare RN project)
-mobile/android/app/build/
-mobile/android/.gradle/
-mobile/android/local.properties
-mobile/android/keystore.properties
-mobile/android/*.keystore
-mobile/android/*.
-mobile/android/.idea
-mobile/android/app/.cxx/
+apps/mobile/android/app/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/android/keystore.properties
+apps/mobile/android/*.keystore
+apps/mobile/android/*.
+apps/mobile/android/.idea
+apps/mobile/android/app/.cxx/
 
 # iOS build artifacts (mobile/ios itself IS committed)
-mobile/ios/build/
-mobile/ios/Pods/
-mobile/ios/*.xcworkspace/xcuserdata/
+apps/mobile/ios/build/
+apps/mobile/ios/Pods/
+apps/mobile/ios/*.xcworkspace/xcuserdata/
 docs/

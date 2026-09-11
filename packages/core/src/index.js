@@ -50,8 +50,8 @@ export const toExpenseRows=(expenses,categories)=>expenses.map(e=>({
 
 // --- backup / restore helpers ---
 export const BACKUP_VERSION=1;
-export function buildBackupPayload({expenses,categories,budget,profile}){
- return JSON.stringify({app:'daily-expense-tracker',version:BACKUP_VERSION,exportedAt:new Date().toISOString(),expenses,categories,budget,profile},null,2);
+export function buildBackupPayload({expenses,categories,budget,profile,categoryBudgets={},recurring=[]}){
+ return JSON.stringify({app:'daily-expense-tracker',version:BACKUP_VERSION,exportedAt:new Date().toISOString(),expenses,categories,budget,categoryBudgets,recurring,profile},null,2);
 }
 export function parseBackupPayload(text){
  const data=JSON.parse(text);
@@ -60,6 +60,8 @@ export function parseBackupPayload(text){
   expenses:data.expenses,
   categories:data.categories,
   budget:Number(data.budget)||0,
+  categoryBudgets:data.categoryBudgets&&typeof data.categoryBudgets==='object'?data.categoryBudgets:{},
+  recurring:Array.isArray(data.recurring)?data.recurring:[],
   profile:data.profile&&typeof data.profile==='object'?{...defaultProfile,...data.profile}:defaultProfile
  };
 }

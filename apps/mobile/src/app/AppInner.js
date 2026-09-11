@@ -1,22 +1,12 @@
 import React,{useEffect,useMemo,useState,useRef} from 'react';
 import {SafeAreaView,View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Alert,AppState} from 'react-native';
-import {GestureHandlerRootView,Swipeable} from 'react-native-gesture-handler';
-import RNFS from 'react-native-fs';
-import Share from 'react-native-share';
-import * as XLSX from 'xlsx';
-import {secureGetItem,secureSetItem} from './secureStorage';
-import {encryptBackupPayload,decryptBackupPayload} from './backupCrypto';
-import {isBiometrySupported,enableBiometricUnlock,disableBiometricUnlock,verifyBiometricUnlock} from './appLock';
-import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses,computeQuickAddSuggestions,computeStreaks,computePeriodComparison,normalizeImportedRows} from './shared';
+import {RNFS,Share,XLSX,secureGetItem,secureSetItem,isBiometrySupported,enableBiometricUnlock,disableBiometricUnlock,verifyBiometricUnlock} from '../services/index.js';
+import {defaultCategories,paymentMethods,avatarChoices,defaultProfile,emptyExpenses,formatINR,total,monthNames,weekdayLabels,dateKey,buildCalendarGrid,toExpenseRows,isIncomeCategory,buildBackupPayload,parseBackupPayload,isEncryptedBackupText,defaultAppLock,isValidPin,recurringFrequencies,frequencyLabels,generateDueExpenses,computeQuickAddSuggestions,computeStreaks,computePeriodComparison,normalizeImportedRows} from '../../../packages/core/src/index.js';
 import {Home,ListChecks,Plus,PieChart,Target,Tags,User,X,Download,Upload,ChevronLeft,ChevronRight,Lock,Pencil,Trash2} from 'lucide-react-native';
-
+import {Section,Stat,EmptyState,Row,MonthlyOverview,Calendar,LockScreen,PinSetupForm,Onboarding} from '../components/index.js';
+import s from '../styles/styles.js';
 const today=()=>new Date().toISOString().slice(0,10);
 const CATEGORY_ICON_CHOICES=['🏷️','🍽️','🚕','🏋️','🎮','📚','🧾','🐾','🎁','✈️','🧹','🔧'];
-
-export default function App(){
- return <GestureHandlerRootView style={{flex:1}}><AppInner/></GestureHandlerRootView>;
-}
-
 function AppInner(){
  const [expenses,setExpenses]=useState([]),[cats,setCats]=useState(defaultCategories),[budget,setBudget]=useState(0),[loaded,setLoaded]=useState(false);
  const [profile,setProfile]=useState(defaultProfile);
@@ -190,7 +180,7 @@ function AppInner(){
  // password-encrypted backup; only way to move data across reinstall/new phone
  async function exportBackup(){
   if(backupPassword.length<4)return Alert.alert('Set a backup password','Enter a password with at least 4 characters. You will need it again to restore this backup.');
-  const plain=buildBackupPayload({expenses,categories:cats,budget,profile});
+  const plain=buildBackupPayload({expenses,categories:cats,budget,profile,categoryBudgets,recurring});
   const envelope=encryptBackupPayload(plain,backupPassword);
   const path=RNFS.DocumentDirectoryPath+'/daily-expense-backup.json';
   await RNFS.writeFile(path,envelope,'utf8');
@@ -212,7 +202,7 @@ function AppInner(){
   Alert.alert('Restore this backup?','This replaces everything currently in the app with the backup data. This cannot be undone.',[
    {text:'Cancel',style:'cancel'},
    {text:'Restore',style:'destructive',onPress:()=>{
-    setExpenses(data.expenses);setCats(data.categories.length?data.categories:defaultCategories);setBudget(data.budget);setProfile(data.profile);
+    setExpenses(data.expenses);setCats(data.categories.length?data.categories:defaultCategories);setBudget(data.budget);setCategoryBudgets(data.categoryBudgets||{});setRecurring(data.recurring||[]);setProfile(data.profile);
     setRestoreText('');setRestorePassword('');
     Alert.alert('Restored','Your data has been restored from the backup.')
    }}
@@ -517,232 +507,5 @@ function AppInner(){
  </SafeAreaView>
 }
 
-function LockScreen({appLock,onUnlock}){
- const [pin,setPin]=useState(''),[error,setError]=useState(''),[usePin,setUsePin]=useState(appLock.mode!=='biometric');
- useEffect(()=>{
-  if(appLock.mode==='biometric'&&!usePin){
-   verifyBiometricUnlock().then(ok=>{if(ok)onUnlock();else setUsePin(true)});
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[usePin]);
- function tryPin(){
-  if(pin===appLock.pin)onUnlock();
-  else{setError('Incorrect PIN');setPin('')}
- }
- return <SafeAreaView style={s.safe}>
-  <View style={s.lockWrap}>
-   <Lock size={40} color={DARK} strokeWidth={1.6} style={{marginBottom:6}}/>
-   <Text style={s.title}>Locked</Text>
-   <Text style={s.muted}>{usePin?'Enter your PIN to continue':'Unlock with Face ID / fingerprint'}</Text>
-   {usePin?<>
-    <TextInput style={[s.input,s.pinInput]} keyboardType="numeric" secureTextEntry maxLength={6} value={pin} onChangeText={t=>{setPin(t);setError('')}} placeholder="••••" autoFocus/>
-    {!!error&&<Text style={s.danger}>{error}</Text>}
-    <TouchableOpacity style={s.primary} onPress={tryPin}><Text style={s.primaryText}>Unlock</Text></TouchableOpacity>
-    {appLock.mode==='biometric'&&<TouchableOpacity style={s.cancel} onPress={()=>setUsePin(false)}><Text style={s.cancelText}>Use Face ID / fingerprint instead</Text></TouchableOpacity>}
-   </>:<TouchableOpacity style={s.primary} onPress={()=>verifyBiometricUnlock().then(ok=>ok?onUnlock():setUsePin(true))}><Text style={s.primaryText}>Try again</Text></TouchableOpacity>}
-  </View>
- </SafeAreaView>
-}
 
-function PinSetupForm({pinDraft,setPinDraft,pinConfirm,setPinConfirm,onSave,onCancel}){
- return <View style={{marginTop:12}}>
-  <Text style={s.label}>New PIN (4-6 digits)</Text>
-  <TextInput style={s.input} keyboardType="numeric" secureTextEntry maxLength={6} value={pinDraft} onChangeText={setPinDraft} placeholder="••••"/>
-  <Text style={s.label}>Confirm PIN</Text>
-  <TextInput style={s.input} keyboardType="numeric" secureTextEntry maxLength={6} value={pinConfirm} onChangeText={setPinConfirm} placeholder="••••"/>
-  <TouchableOpacity style={s.primary} onPress={onSave}><Text style={s.primaryText}>Save PIN</Text></TouchableOpacity>
-  <TouchableOpacity style={s.cancel} onPress={onCancel}><Text style={s.cancelText}>Cancel</Text></TouchableOpacity>
- </View>
-}
-
-function Onboarding({onDone}){
- return <SafeAreaView style={s.safe}>
-  <ScrollView contentContainerStyle={[s.container,{flexGrow:1,justifyContent:'center'}]}>
-   <Text style={s.onboardEmoji}>💰</Text>
-   <Text style={[s.title,{textAlign:'center'}]}>Welcome to Daily Expense Tracker</Text>
-   <Text style={[s.muted,{textAlign:'center',marginTop:6,marginBottom:26}]}>A few things before you start:</Text>
-   <View style={s.onboardRow}>
-    <Text style={s.onboardIcon}>✍️</Text>
-    <View style={{flex:1}}><Text style={s.bold}>Log expenses in seconds</Text><Text style={s.muted}>Tap a date on the calendar, or the + tab, to add one. No account or setup needed.</Text></View>
-   </View>
-   <View style={s.onboardRow}>
-    <Text style={s.onboardIcon}>🎯</Text>
-    <View style={{flex:1}}><Text style={s.bold}>Set a budget anytime</Text><Text style={s.muted}>See exactly what&apos;s left to spend this month, overall or per category.</Text></View>
-   </View>
-   <View style={s.onboardRow}>
-    <Text style={s.onboardIcon}>🔒</Text>
-    <View style={{flex:1}}><Text style={s.bold}>Everything stays private</Text><Text style={s.muted}>Your data is encrypted on this device and never leaves it unless you export a backup yourself.</Text></View>
-   </View>
-   <TouchableOpacity style={[s.primary,{marginTop:30}]} onPress={onDone} accessibilityRole="button"><Text style={s.primaryText}>Get started</Text></TouchableOpacity>
-  </ScrollView>
- </SafeAreaView>
-}
-
-const Section=({title,children})=><View style={s.section}><Text style={s.heading}>{title}</Text>{children}</View>;
-const Stat=({t,v})=><View style={s.stat}><Text style={s.muted}>{t}</Text><Text style={s.statValue}>{v}</Text></View>;
-const EmptyState=({icon,text,actionLabel,onAction})=><View style={s.empty}>
- <Text style={s.emptyIcon}>{icon}</Text>
- <Text style={s.emptyText}>{text}</Text>
- {actionLabel&&<TouchableOpacity style={s.secondary} onPress={onAction}><Text style={s.secondaryText}>{actionLabel}</Text></TouchableOpacity>}
-</View>;
-const Row=({e,cats,onEdit,onDelete})=>{
- const c=cats.find(c=>c.id===e.category);
- const label=e.description||c?.name||'Uncategorized';
- // swipe is a shortcut; Edit/Delete links stay visible for discoverability/a11y
- const renderRightActions=()=><View style={{flexDirection:'row'}}>
-  <TouchableOpacity style={s.swipeEdit} onPress={()=>onEdit(e)} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}><Pencil size={18} color="#fff"/></TouchableOpacity>
-  <TouchableOpacity style={s.swipeDelete} onPress={()=>onDelete(e.id)} accessibilityRole="button" accessibilityLabel={`Delete ${label}`}><Trash2 size={18} color="#fff"/></TouchableOpacity>
- </View>;
- return <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
-  <View style={s.row}>
-   <Text style={s.emoji}>{c?.icon||'📦'}</Text>
-   <View style={{flex:1}}><Text style={s.bold}>{label}</Text><Text style={s.muted}>{c?.name||'Uncategorized'} · {e.date}{e.recurringId?' · 🔁':''}</Text></View>
-   <Text style={s.bold}>{formatINR(e.amount)}</Text>
-   <TouchableOpacity onPress={()=>onEdit(e)} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}><Text style={s.linkBtn}>Edit</Text></TouchableOpacity>
-   <TouchableOpacity onPress={()=>onDelete(e.id)} accessibilityRole="button" accessibilityLabel={`Delete ${label}`}><Text style={s.danger}>Delete</Text></TouchableOpacity>
-  </View>
- </Swipeable>
-};
-
-function MonthlyOverview({expenses,cats}){
- const m={};
- expenses.forEach(e=>{
-  const k=e.date.slice(0,7);
-  if(!m[k])m[k]={month:k,expense:0,income:0};
-  if(isIncomeCategory(cats,e.category))m[k].income+=Number(e.amount);
-  else m[k].expense+=Number(e.amount);
- });
- const rows=Object.values(m).sort((a,b)=>a.month.localeCompare(b.month)).slice(-6);
- const max=Math.max(1,...rows.map(r=>Math.max(r.expense,r.income)));
- return <View>
-  {rows.map(r=><View key={r.month} style={{marginBottom:14}}>
-   <Text style={s.bold}>{r.month}</Text>
-   <View style={s.rowTop}><Text style={s.muted}>Expense</Text><Text style={s.muted}>{formatINR(r.expense)}</Text></View>
-   <View style={s.track}><View style={[s.fill,{width:(r.expense/max*100)+'%'}]}/></View>
-   <View style={[s.rowTop,{marginTop:6}]}><Text style={s.muted}>Income</Text><Text style={s.muted}>{formatINR(r.income)}</Text></View>
-   <View style={s.track}><View style={[s.fill,s.fillWarn,{width:(r.income/max*100)+'%'}]}/></View>
-  </View>)}
-  {!rows.length&&<EmptyState icon="📈" text="No data yet. Start adding expenses or income to see monthly trends."/>}
- </View>
-}
-
-function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
- const cells=useMemo(()=>buildCalendarGrid(year,month),[year,month]);
- const todayKey=today();
- return <View>
-  <View style={s.rowTop}>
-   <Text style={s.bold}>{monthNames[month]} {year}</Text>
-   <View style={{flexDirection:'row',gap:14}}><TouchableOpacity onPress={onPrev} style={s.calNavBtn} accessibilityRole="button" accessibilityLabel="Previous month"><ChevronLeft size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity><TouchableOpacity onPress={onNext} style={s.calNavBtn} accessibilityRole="button" accessibilityLabel="Next month"><ChevronRight size={18} color={DARK} strokeWidth={2.4}/></TouchableOpacity></View>
-  </View>
-  <View style={s.calRow}>{weekdayLabels.map(w=><Text style={s.calDow} key={w}>{w}</Text>)}</View>
-  <View style={s.calGrid}>
-   {cells.map((c,i)=>{
-    const key=dateKey(c.y,c.m,c.day);
-    const amt=spendByDay[key];
-    return <TouchableOpacity key={i} disabled={!c.inMonth} onPress={()=>onSelectDay(key)}
-     style={[s.calCell,!c.inMonth&&s.calOut,key===todayKey&&s.calToday,amt&&s.calSpend]}>
-     <Text style={s.calDay} maxFontSizeMultiplier={1.3}>{c.day}</Text>
-     {amt?<Text style={s.calAmt} numberOfLines={1} maxFontSizeMultiplier={1.2}>{formatINR(amt).replace('₹','')}</Text>:null}
-    </TouchableOpacity>
-   })}
-  </View>
- </View>
-}
-
-// numeric font weights ('700'/'800') don't render on some Android versions; use 'bold'
-const GREEN='#5FA429',GREEN_TINT='#E8F3D9',DARK='#151717',BG='#F0F2E9',BORDER='#C9D0BC',MUTED='#586154';
-const s=StyleSheet.create({
- safe:{flex:1,backgroundColor:BG},
- container:{padding:20,paddingBottom:110},
- loadingWrap:{flex:1,alignItems:'center',justifyContent:'center'},
- title:{fontSize:26,fontWeight:'bold',color:DARK},
- muted:{color:MUTED,marginTop:4},
- mutedLight:{color:'#d7dce6'},
- heroHint:{color:'#e9f5cf',marginTop:10,fontWeight:'bold',fontSize:12},
- greetRow:{flexDirection:'row',alignItems:'center',gap:12,marginTop:6},
- avatarCircle:{width:52,height:52,borderRadius:26,backgroundColor:GREEN_TINT,alignItems:'center',justifyContent:'center'},
- avatarEmoji:{fontSize:26},
- avatarPreviewRow:{alignItems:'center',marginBottom:14},
- avatarCircleLg:{width:88,height:88,borderRadius:44,backgroundColor:GREEN_TINT,alignItems:'center',justifyContent:'center'},
- avatarEmojiLg:{fontSize:44},
- hero:{backgroundColor:DARK,borderRadius:22,padding:22,marginTop:16},
- heroRow:{flexDirection:'row',alignItems:'center'},
- heroCol:{flex:1},
- heroDivider:{width:1,alignSelf:'stretch',backgroundColor:'rgba(255,255,255,0.18)',marginHorizontal:16},
- total:{fontSize:30,fontWeight:'bold',color:'#fff',marginVertical:8},
- totalWarn:{color:'#FFB4AC'},
- two:{flexDirection:'row',gap:12,marginTop:14},
- stat:{backgroundColor:'#fff',borderRadius:16,padding:16,flex:1,borderWidth:1.5,borderColor:BORDER},
- statValue:{fontSize:18,fontWeight:'bold',marginTop:8,color:DARK},
- section:{backgroundColor:'#fff',borderRadius:18,padding:18,marginTop:16,borderWidth:1.5,borderColor:BORDER},
- heading:{fontSize:19,fontWeight:'bold',marginBottom:12,color:DARK},
- row:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:12,borderBottomWidth:1,borderBottomColor:BORDER},
- rowTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingVertical:8},
- rowInline:{flexDirection:'row',gap:8,alignItems:'center',marginBottom:14},
- emoji:{fontSize:24},
- bold:{fontWeight:'bold',color:DARK},
- danger:{color:'#b23b3b',fontWeight:'bold'},
- linkBtn:{color:'#2F6FE0',fontWeight:'bold'},
- label:{fontWeight:'bold',marginTop:12,marginBottom:7,color:DARK,fontSize:14},
- smallLabel:{fontSize:11,fontWeight:'bold',color:MUTED,marginBottom:5},
- hint:{fontSize:12,color:MUTED,marginTop:8,lineHeight:17},
- dateToggle:{marginTop:12,marginBottom:4},
- input:{borderWidth:1.5,borderColor:BORDER,borderRadius:11,padding:13,fontSize:16,backgroundColor:'#fff',color:DARK},
- multiline:{height:110,textAlignVertical:'top',marginTop:10},
- catBudgetInput:{borderWidth:1.5,borderColor:BORDER,borderRadius:9,paddingVertical:8,paddingHorizontal:12,fontSize:14,backgroundColor:'#fff',color:DARK,minWidth:100,textAlign:'right'},
- chip:{flexDirection:'row',alignItems:'center',paddingVertical:10,paddingHorizontal:14,backgroundColor:BG,borderRadius:20,marginRight:8,marginBottom:8,borderWidth:1,borderColor:BORDER},
- chipText:{color:DARK,fontSize:14},
- selected:{borderWidth:2,borderColor:DARK,backgroundColor:GREEN_TINT},
- primary:{backgroundColor:DARK,padding:16,borderRadius:12,alignItems:'center',marginTop:18},
- btnRow:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},
- primaryText:{color:'#fff',fontWeight:'bold',fontSize:15},
- secondary:{backgroundColor:GREEN_TINT,padding:13,borderRadius:12,alignItems:'center',marginTop:12,marginBottom:10,borderWidth:1,borderColor:'#cfe3b3'},
- secondaryText:{color:'#33500f',fontWeight:'bold'},
- cancel:{padding:14,alignItems:'center',marginTop:8},
- cancelText:{color:MUTED,fontWeight:'bold'},
- addCatBtn:{backgroundColor:DARK,paddingHorizontal:16,paddingVertical:13,borderRadius:11},
- catGrid:{flexDirection:'row',flexWrap:'wrap',gap:8},
- catChip:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:BG,borderRadius:20,paddingVertical:9,paddingHorizontal:13,borderWidth:1,borderColor:BORDER},
- big:{fontSize:36,fontWeight:'bold',marginVertical:7,color:DARK},
- alert:{marginTop:14,padding:12,borderRadius:12,backgroundColor:'#FBE4C0',color:'#5c3a06',fontWeight:'bold'},
- track:{height:12,backgroundColor:BG,borderRadius:20,overflow:'hidden',marginVertical:10,borderWidth:1,borderColor:BORDER},
- fill:{height:'100%',backgroundColor:GREEN},
- fillWarn:{backgroundColor:'#D98416'},
- metric:{paddingVertical:8},
- empty:{alignItems:'center',paddingVertical:26,gap:8},
- emptyIcon:{fontSize:30},
- emptyText:{color:MUTED,textAlign:'center',paddingHorizontal:12},
- calRow:{flexDirection:'row',marginTop:10},
- calDow:{flex:1,textAlign:'center',fontSize:11,fontWeight:'bold',color:MUTED},
- calGrid:{flexDirection:'row',flexWrap:'wrap'},
- calCell:{width:'14.28%',aspectRatio:1,alignItems:'center',justifyContent:'center',padding:2},
- calOut:{opacity:.35},
- calToday:{borderWidth:1.5,borderColor:DARK,borderRadius:10},
- calSpend:{backgroundColor:GREEN_TINT,borderRadius:10},
- calSelectedCell:{backgroundColor:DARK,borderRadius:10},
- calDay:{fontSize:12,fontWeight:'bold',color:DARK},
- calDaySelected:{color:'#fff'},
- calAmt:{fontSize:8,fontWeight:'bold',color:'#3d6b12'},
- calSelected:{borderTopWidth:1,borderTopColor:BORDER,paddingTop:10,marginTop:6},
- nav:{position:'absolute',bottom:0,left:0,right:0,minHeight:74,backgroundColor:'#fff',borderTopWidth:1.5,borderTopColor:BORDER,flexDirection:'row',alignItems:'center',paddingHorizontal:2,paddingVertical:2},
- navItem:{flex:1,alignItems:'center',justifyContent:'center',paddingTop:6,paddingBottom:6,gap:3},
- navText:{fontSize:9,color:'#5b645b',fontWeight:'600',textAlign:'center',includeFontPadding:false},
- navTextActive:{fontSize:9,fontWeight:'bold',color:DARK,textAlign:'center',includeFontPadding:false},
- calNavBtn:{padding:4},
- lockWrap:{flex:1,alignItems:'center',justifyContent:'center',padding:30,gap:6},
- pinInput:{width:160,textAlign:'center',fontSize:22,letterSpacing:8,marginTop:20,marginBottom:6},
- snackbar:{position:'absolute',left:16,right:16,bottom:88,backgroundColor:DARK,borderRadius:12,paddingVertical:12,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between',shadowColor:'#000',shadowOpacity:0.25,shadowRadius:8,shadowOffset:{width:0,height:4},elevation:6},
- snackbarText:{color:'#fff',fontSize:14,flex:1,marginRight:12},
- snackbarAction:{color:GREEN,fontWeight:'bold',fontSize:14},
- positive:{color:'#3d6b12'},
- streakBadge:{backgroundColor:'#FBE4C0',borderRadius:12,paddingVertical:10,paddingHorizontal:14,marginTop:14},
- streakText:{color:'#7a4d0a',fontWeight:'bold',fontSize:13},
- quickChip:{backgroundColor:GREEN_TINT,borderRadius:14,paddingVertical:10,paddingHorizontal:14,marginRight:10,minWidth:110,borderWidth:1,borderColor:'#cfe3b3'},
- quickChipName:{color:DARK,fontWeight:'bold',fontSize:13},
- quickChipAmount:{color:'#33500f',fontSize:13,marginTop:4},
- swipeEdit:{backgroundColor:'#2F6FE0',justifyContent:'center',alignItems:'center',width:64},
- swipeDelete:{backgroundColor:'#b23b3b',justifyContent:'center',alignItems:'center',width:64},
- onboardEmoji:{fontSize:52,textAlign:'center',marginBottom:8},
- onboardRow:{flexDirection:'row',gap:14,alignItems:'flex-start',marginBottom:22},
- onboardIcon:{fontSize:26}
-});
+export default AppInner;

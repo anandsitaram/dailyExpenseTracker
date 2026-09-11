@@ -1,27 +1,31 @@
 {
-  "name": "daily-expense-tracker",
+  "name": "daily-expense-tracker-monorepo",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
+  "workspaces": [
+    "apps/web",
+    "apps/mobile",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run"
+    "web:dev": "npm --prefix apps/web run dev",
+    "web:build": "npm --prefix apps/web run build",
+    "web:test": "npm --prefix apps/web run test",
+    "mobile:test": "npm --prefix apps/mobile run test",
+    "mobile:lint": "npm --prefix apps/mobile run lint",
+    "test": "npm run web:test && npm run mobile:test",
+    "build": "npm run web:build",
+    "core:test": "node --test tests/*.test.mjs",
+    "web:e2e": "playwright test",
+    "typecheck": "tsc --noEmit --pretty false",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md,css}\"",
+    "prepare": "husky"
   },
-  "dependencies": {
-    "lucide-react": "^1.43.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.13.0",
-    "xlsx": "^0.18.5"
-  },
+  "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.48.0",
-    "@vitejs/plugin-react": "^4.3.3",
-    "eslint-config-prettier": "^10.1.8",
-    "prettier": "^3.9.6",
-    "vite": "^5.4.10",
-    "vitest": "^2.1.4"
+    "typescript": "^5.7.3",
+    "prettier": "^3.4.2",
+    "husky": "^9.1.7"
   }
 }
