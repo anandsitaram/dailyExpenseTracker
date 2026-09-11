@@ -17,7 +17,8 @@ test('phase 1-4 architecture artifacts exist', () => {
     'docs/adr/0001-monorepo-shared-core.md',
     'docs/adr/0002-platform-adapters.md',
     'docs/adr/0003-local-first-data.md',
-  ]) assert.ok(fs.existsSync(path.join(root, file)), file);
+  ])
+    assert.ok(fs.existsSync(path.join(root, file)), file);
 });
 
 test('web and mobile consume the shared core', () => {
