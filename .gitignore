@@ -23,3 +23,4 @@ apps/mobile/ios/build/
 apps/mobile/ios/Pods/
 apps/mobile/ios/*.xcworkspace/xcuserdata/
 docs/
+playwright-report/
