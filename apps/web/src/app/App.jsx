@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   PieChart as PieChartIcon,
   Home,
@@ -9,7 +9,6 @@ import {
   User,
   Download,
   Upload,
-  Lock,
   Flame,
   TrendingUp,
   TrendingDown,
@@ -465,8 +464,7 @@ function App() {
     reader.readAsArrayBuffer(file);
   }
 
-  if (loadError)
-    return <main style={{ padding: 40 }}>{loadError}</main>;
+  if (loadError) return <main style={{ padding: 40 }}>{loadError}</main>;
   if (!loaded)
     return (
       <div className="app">
