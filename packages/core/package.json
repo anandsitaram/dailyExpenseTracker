@@ -8,6 +8,10 @@
   "exports": {
     ".": "./src/index.js",
     "./backupCrypto": "./src/backupCrypto.js",
+    "./backupFormat": "./src/backupFormat.js",
     "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
   }
 }

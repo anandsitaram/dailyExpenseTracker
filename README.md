@@ -90,33 +90,3 @@ No backend - no server, no database, no account. Everything's encrypted on-devic
 ## Stack
 
 React + Vite (web), React Native bare (mobile), Playwright (e2e), GitHub Actions (CI + Android build).
-
-## Refactored architecture
-
-- `apps/web` — React/Vite web application
-- `apps/mobile` — React Native application
-- `packages/core` — shared domain/business logic used by web and mobile
-- `tests/unit` — cross-platform test area
-
-The refactor separates application entry points, UI components, services, styles, and shared domain logic while preserving the existing feature set.
-
-## 🏗️ Production Architecture
-
-This repository uses a Web + React Native monorepo with a shared platform-independent core:
-
-- `apps/web` — React/Vite browser application
-- `apps/mobile` — React Native Android/iOS application
-- `packages/core` — shared expense, recurring, calendar, analytics, backup and validation logic
-- `tests` — repository architecture/regression checks
-- `e2e` — Playwright browser acceptance tests
-- `docs` — architecture, testing, security and ADR documentation
-
-See `docs/phase-implementation.md` for the complete Phase 1–4 checklist.
-
-## 🔐 Backup and Restore
-
-Backups include expenses, categories, budget, category budgets, recurring templates and profile data. Older backups that do not contain the newer optional fields remain restorable.
-
-## ✅ Quality Gates
-
-CI is configured to run shared-core tests, TypeScript contract checking, formatting checks, Web build/unit tests, Playwright E2E tests, Mobile Jest/lint and Android Gradle build.

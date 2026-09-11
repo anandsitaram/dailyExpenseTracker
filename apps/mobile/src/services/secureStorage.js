@@ -7,6 +7,7 @@ import CryptoJS from 'crypto-js';
 
 const KEYCHAIN_SERVICE = 'com.dailyexpensetracker.app.masterkey';
 let cachedKey = null;
+let keyPromise = null;
 
 function randomHexKey(bytesLength) {
   const bytes = new Uint8Array(bytesLength);
@@ -17,6 +18,17 @@ function randomHexKey(bytesLength) {
 }
 
 async function getOrCreateKey() {
+  if (keyPromise) return keyPromise;
+  keyPromise = loadOrCreateKey();
+  try {
+    return await keyPromise;
+  } catch (error) {
+    keyPromise = null;
+    throw error;
+  }
+}
+
+async function loadOrCreateKey() {
   if (cachedKey) return cachedKey;
   const existing = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
   if (existing && existing.password) {
@@ -48,6 +60,6 @@ export async function secureGetItem(key, fallback = null) {
     return json ? JSON.parse(json) : fallback;
   } catch (e) {
     console.error('secureStorage: failed to decrypt', key, e);
-    return fallback;
+    throw new Error(`Unable to read encrypted storage: ${key}`);
   }
 }

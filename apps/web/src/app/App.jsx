@@ -34,6 +34,7 @@ import {
   computeStreaks,
   computePeriodComparison,
   normalizeImportedRows,
+  todayDateKey,
 } from '../../../../packages/core/src/index.js';
 import { secureGet, secureSet } from '../services/storage.js';
 import {
@@ -58,7 +59,7 @@ import {
   AppLockPanel,
 } from '../components/index.jsx';
 import '../styles/style.css';
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayDateKey;
 function App() {
   const [expenses, setExpenses] = useState(emptyExpenses);
   const [categories, setCategories] = useState(defaultCategories);
@@ -68,7 +69,8 @@ function App() {
   const [appLock, setAppLock] = useState(defaultAppLock);
   const [profile, setProfile] = useState(defaultProfile);
   const [theme, setTheme] = useState('light');
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(false),
+    [loadError, setLoadError] = useState(null);
   const [tab, setTab] = useState('dashboard'),
     [editing, setEditing] = useState(null),
     [search, setSearch] = useState(''),
@@ -111,30 +113,34 @@ function App() {
   // load once on mount
   useEffect(() => {
     (async () => {
-      const [e, c, b, p, cb, r, al, th, ob] = await Promise.all([
-        secureGet('det-expenses', emptyExpenses),
-        secureGet('det-categories', defaultCategories),
-        secureGet('det-budget', 0),
-        secureGet('det-profile', defaultProfile),
-        secureGet('det-categoryBudgets', {}),
-        secureGet('det-recurring', []),
-        secureGet('det-appLock', defaultAppLock),
-        secureGet('det-theme', 'light'),
-        secureGet('det-onboardingDone', false),
-      ]);
-      // catch up recurring expenses due since last open
-      const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
-      const mergedExpenses = newExpenses.length ? [...newExpenses, ...e] : e;
-      setExpenses(mergedExpenses);
-      setCategories(c);
-      setBudget(Number(b) || 0);
-      setProfile({ ...defaultProfile, ...p });
-      setCategoryBudgets(cb);
-      setRecurring(updatedTemplates);
-      setAppLock({ ...defaultAppLock, ...al });
-      setTheme(th === 'dark' ? 'dark' : 'light');
-      setOnboardingDone(!!ob);
-      setLoaded(true);
+      try {
+        const [e, c, b, p, cb, r, al, th, ob] = await Promise.all([
+          secureGet('det-expenses', emptyExpenses),
+          secureGet('det-categories', defaultCategories),
+          secureGet('det-budget', 0),
+          secureGet('det-profile', defaultProfile),
+          secureGet('det-categoryBudgets', {}),
+          secureGet('det-recurring', []),
+          secureGet('det-appLock', defaultAppLock),
+          secureGet('det-theme', 'light'),
+          secureGet('det-onboardingDone', false),
+        ]);
+        const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
+        const mergedExpenses = newExpenses.length ? [...newExpenses, ...e] : e;
+        setExpenses(mergedExpenses);
+        setCategories(c);
+        setBudget(Number(b) || 0);
+        setProfile({ ...defaultProfile, ...p });
+        setCategoryBudgets(cb);
+        setRecurring(updatedTemplates);
+        setAppLock({ ...defaultAppLock, ...al });
+        setTheme(th === 'dark' ? 'dark' : 'light');
+        setOnboardingDone(!!ob);
+        setLoaded(true);
+      } catch (error) {
+        console.error('Failed to load encrypted app data', error);
+        setLoadError('Unable to unlock your saved data. Restore a backup or reload the app.');
+      }
     })();
   }, []);
   // wait for loaded, else placeholder state overwrites storage
@@ -459,6 +465,8 @@ function App() {
     reader.readAsArrayBuffer(file);
   }
 
+  if (loadError)
+    return <main style={{ padding: 40 }}>{loadError}</main>;
   if (!loaded)
     return (
       <div className="app">

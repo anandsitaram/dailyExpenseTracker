@@ -72,6 +72,8 @@ export const monthNames = [
 export const weekdayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 export const pad2 = (n) => String(n).padStart(2, '0');
 export const dateKey = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+export const todayDateKey = (date = new Date()) =>
+  dateKey(date.getFullYear(), date.getMonth(), date.getDate());
 export const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
 export const firstWeekdayOfMonth = (y, m) => new Date(y, m, 1).getDay();
 // 6x7 calendar grid for a given year/month (0-indexed)
@@ -163,12 +165,22 @@ export const isValidPin = (pin) => /^\d{4,6}$/.test(pin || '');
 // --- recurring expenses ---
 export const recurringFrequencies = ['daily', 'weekly', 'monthly'];
 export const frequencyLabels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+function isValidDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month - 1);
+}
 export function nextDueDate(dateStr, frequency) {
-  const d = new Date(dateStr + 'T00:00:00');
-  if (frequency === 'daily') d.setDate(d.getDate() + 1);
-  else if (frequency === 'weekly') d.setDate(d.getDate() + 7);
-  else d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 10);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (frequency === 'daily') d.setUTCDate(d.getUTCDate() + 1);
+  else if (frequency === 'weekly') d.setUTCDate(d.getUTCDate() + 7);
+  else {
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    d.setUTCDate(Math.min(day, daysInMonth(d.getUTCFullYear(), d.getUTCMonth())));
+  }
+  return dateKey(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 // returns due occurrences (with catch-up) + advanced templates; pure, dedups via recurringId
 export function generateDueExpenses(templates, existingExpenses, todayStr) {
@@ -237,8 +249,8 @@ export function computeStreaks(expenses, todayStr) {
   let longest = 1,
     run = 1;
   for (let i = 1; i < days.length; i++) {
-    const prev = new Date(days[i - 1] + 'T00:00:00'),
-      cur = new Date(days[i] + 'T00:00:00');
+    const prev = new Date(`${days[i - 1]}T00:00:00Z`),
+      cur = new Date(`${days[i]}T00:00:00Z`);
     const diffDays = Math.round((cur - prev) / 86400000);
     if (diffDays === 1) {
       run++;
@@ -250,11 +262,11 @@ export function computeStreaks(expenses, todayStr) {
   // walk back from today/yesterday so an unlogged today doesn't zero the streak
   const daySet = new Set(days);
   let current = 0;
-  let cursor = new Date(todayStr + 'T00:00:00');
+  let cursor = new Date(`${todayStr}T00:00:00Z`);
   if (!daySet.has(todayStr)) cursor.setDate(cursor.getDate() - 1);
   while (daySet.has(cursor.toISOString().slice(0, 10))) {
     current++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return { current, longest };
 }
@@ -335,7 +347,7 @@ function normalizeDate(v) {
   if (!v) return null;
   if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
   const s = String(v).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (isValidDateKey(s)) return s;
   const parsed = new Date(s);
   if (!isNaN(parsed)) return parsed.toISOString().slice(0, 10);
   return null;

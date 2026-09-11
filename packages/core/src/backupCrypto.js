@@ -1,57 +1,58 @@
-// Password-based encryption for backup export files (separate from secureStorage.js's device-held key). PBKDF2 (100k, SHA-256) -> AES-256-GCM, random salt+IV per export.
-const PBKDF2_ITERATIONS = 100000;
-const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+import CryptoJS from 'crypto-js';
+import {
+  BACKUP_PBKDF2_ITERATIONS,
+  buildBackupEnvelope,
+  parseBackupEnvelope,
+} from './backupFormat.js';
 
-async function deriveKey(password, salt) {
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
+function deriveKey(password, salt) {
+  return CryptoJS.PBKDF2(password, salt, {
+    keySize: 256 / 32,
+    iterations: BACKUP_PBKDF2_ITERATIONS,
+    hasher: CryptoJS.algo.SHA256,
+  });
 }
 
 // plainJsonStr -> JSON-stringified envelope (safe to write straight to a downloaded file)
-export async function encryptBackupPayload(plainJsonStr, password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
-  const cipher = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(plainJsonStr),
-  );
-  return JSON.stringify({
-    encrypted: true,
-    kdf: 'PBKDF2-SHA256',
-    iterations: PBKDF2_ITERATIONS,
-    cipher: 'AES-256-GCM',
-    salt: toB64(salt),
-    iv: toB64(iv),
-    data: toB64(cipher),
+export function encryptBackupPayload(plainJsonStr, password) {
+  const salt = CryptoJS.lib.WordArray.random(16);
+  const iv = CryptoJS.lib.WordArray.random(16);
+  const key = deriveKey(password, salt);
+  const encrypted = CryptoJS.AES.encrypt(plainJsonStr, key, {
+    iv,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  const data = encrypted.ciphertext;
+  const mac = CryptoJS.HmacSHA256(iv.clone().concat(data), key);
+  return buildBackupEnvelope({
+    salt: salt.toString(CryptoJS.enc.Base64),
+    iv: iv.toString(CryptoJS.enc.Base64),
+    data: data.toString(CryptoJS.enc.Base64),
+    mac: mac.toString(CryptoJS.enc.Base64),
   });
 }
 
 // envelope JSON string + password -> plain backup JSON string (throws on wrong password/corruption)
-export async function decryptBackupPayload(envelopeStr, password) {
-  const env = JSON.parse(envelopeStr);
-  const key = await deriveKey(password, fromB64(env.salt));
+export function decryptBackupPayload(envelopeStr, password) {
+  const env = parseBackupEnvelope(envelopeStr);
+  const salt = CryptoJS.enc.Base64.parse(env.salt);
+  const iv = CryptoJS.enc.Base64.parse(env.iv);
+  const data = CryptoJS.enc.Base64.parse(env.data);
+  const key = deriveKey(password, salt);
   try {
-    const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromB64(env.iv) },
-      key,
-      fromB64(env.data),
+    const expectedMac = CryptoJS.HmacSHA256(iv.clone().concat(data), key).toString(
+      CryptoJS.enc.Base64,
     );
-    return new TextDecoder().decode(plain);
+    if (expectedMac !== env.mac) throw new Error('Invalid backup MAC');
+    const decrypted = CryptoJS.AES.decrypt(
+      CryptoJS.lib.CipherParams.create({ ciphertext: data }),
+      key,
+      { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 },
+    );
+    const plain = decrypted.toString(CryptoJS.enc.Utf8);
+    if (!plain) throw new Error('Invalid backup plaintext');
+    return plain;
   } catch (e) {
     throw new Error('Wrong password or corrupted backup');
   }

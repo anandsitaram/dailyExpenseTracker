@@ -44,6 +44,7 @@ import {
   computeStreaks,
   computePeriodComparison,
   normalizeImportedRows,
+  todayDateKey,
 } from '../../../../packages/core/src/index.js';
 import {
   Home,
@@ -69,7 +70,7 @@ import {
   Onboarding,
 } from '../components/index.js';
 import s, { DARK } from '../styles/styles.js';
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayDateKey;
 const CATEGORY_ICON_CHOICES = [
   '🏷️',
   '🍽️',
@@ -88,7 +89,8 @@ function AppInner() {
   const [expenses, setExpenses] = useState([]),
     [cats, setCats] = useState(defaultCategories),
     [budget, setBudget] = useState(0),
-    [loaded, setLoaded] = useState(false);
+    [loaded, setLoaded] = useState(false),
+    [loadError, setLoadError] = useState(null);
   const [profile, setProfile] = useState(defaultProfile);
   const [recurring, setRecurring] = useState([]);
   const [categoryBudgets, setCategoryBudgets] = useState({});
@@ -150,26 +152,30 @@ function AppInner() {
 
   useEffect(() => {
     (async () => {
-      let e = await secureGetItem('expenses', emptyExpenses);
-      let c = await secureGetItem('categories', defaultCategories);
-      let b = Number(await secureGetItem('budget', 0));
-      let p = await secureGetItem('profile', defaultProfile);
-      let r = await secureGetItem('recurring', []);
-      let cb = await secureGetItem('categoryBudgets', {});
-      let al = await secureGetItem('appLock', defaultAppLock);
-      let ob = await secureGetItem('onboardingDone', false);
-      // catch up recurring expenses due since last open
-      const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
-      if (newExpenses.length) e = [...newExpenses, ...e];
-      setExpenses(e);
-      setCats(c);
-      setBudget(b);
-      setProfile({ ...defaultProfile, ...p });
-      setRecurring(updatedTemplates);
-      setCategoryBudgets(cb);
-      setAppLock({ ...defaultAppLock, ...al });
-      setOnboardingDone(!!ob);
-      setLoaded(true);
+      try {
+        let e = await secureGetItem('expenses', emptyExpenses);
+        let c = await secureGetItem('categories', defaultCategories);
+        let b = Number(await secureGetItem('budget', 0));
+        let p = await secureGetItem('profile', defaultProfile);
+        let r = await secureGetItem('recurring', []);
+        let cb = await secureGetItem('categoryBudgets', {});
+        let al = await secureGetItem('appLock', defaultAppLock);
+        let ob = await secureGetItem('onboardingDone', false);
+        const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
+        if (newExpenses.length) e = [...newExpenses, ...e];
+        setExpenses(e);
+        setCats(c);
+        setBudget(b);
+        setProfile({ ...defaultProfile, ...p });
+        setRecurring(updatedTemplates);
+        setCategoryBudgets(cb);
+        setAppLock({ ...defaultAppLock, ...al });
+        setOnboardingDone(!!ob);
+        setLoaded(true);
+      } catch (error) {
+        console.error('Failed to load encrypted app data', error);
+        setLoadError('Unable to unlock your saved data. Restore a backup or reload the app.');
+      }
     })();
   }, []);
   // wait for loaded, else initial empty state overwrites storage
@@ -637,6 +643,14 @@ function AppInner() {
     </View>
   );
 
+  if (loadError)
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.loadingWrap}>
+          <Text style={s.muted}>{loadError}</Text>
+        </View>
+      </SafeAreaView>
+    );
   if (!loaded)
     return (
       <SafeAreaView style={s.safe}>

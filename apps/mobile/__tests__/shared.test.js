@@ -75,10 +75,8 @@ describe('nextDueDate', () => {
   test('monthly rolls over year boundaries correctly', () => {
     expect(nextDueDate('2026-12-15', 'monthly')).toBe('2027-01-15');
   });
-  test('monthly handles month-end overflow (e.g. Jan 31 -> Mar 3, JS Date behavior)', () => {
-    // Documenting actual behavior: adding a month to Jan 31 overflows past
-    // February in a non-leap year, since Feb has no 31st.
-    expect(nextDueDate('2026-01-31', 'monthly')).toBe('2026-03-03');
+  test('monthly clamps month-end dates to the last day of the next month', () => {
+    expect(nextDueDate('2026-01-31', 'monthly')).toBe('2026-02-28');
   });
 });
 

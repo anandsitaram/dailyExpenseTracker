@@ -3,6 +3,7 @@
 const DB_NAME = 'det-secure',
   STORE = 'keys',
   KEY_ID = 'det-master-key';
+let keyPromise = null;
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -14,6 +15,17 @@ function openDb() {
 }
 
 async function getKey() {
+  if (keyPromise) return keyPromise;
+  keyPromise = getOrCreateKey();
+  try {
+    return await keyPromise;
+  } catch (error) {
+    keyPromise = null;
+    throw error;
+  }
+}
+
+async function getOrCreateKey() {
   const db = await openDb();
   const existing = await new Promise((res, rej) => {
     const tx = db.transaction(STORE, 'readonly');
@@ -60,6 +72,6 @@ export async function secureGet(key, fallback = null) {
     return JSON.parse(new TextDecoder().decode(plain));
   } catch (e) {
     console.error('secureStorage: failed to decrypt', key, e);
-    return fallback;
+    throw new Error(`Unable to read encrypted storage: ${key}`);
   }
 }
