@@ -9,7 +9,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: .
 
     steps:
       - name: Checkout code
@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -32,10 +32,24 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Verify React Native dependencies
+        run: |
+          echo "Node version:"
+          node --version
+
+          echo "npm version:"
+          npm --version
+
+          echo "Babel runtime:"
+          npm ls @babel/runtime
+
+          echo "Babel runtime resolution:"
+          node -e "console.log(require.resolve('@babel/runtime/helpers/interopRequireDefault'))"
 
       - name: Make gradlew executable
-        run: chmod +x android/gradlew
+        run: chmod +x apps/mobile/android/gradlew
 
       - name: Build release APK
         working-directory: apps/mobile/android
