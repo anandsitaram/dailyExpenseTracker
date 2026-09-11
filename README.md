@@ -84,7 +84,6 @@ For a middle-class household, every rupee has a job — rent, groceries, fuel, s
 - All data lives only on your own device — nothing is sent to a server
 - Data is **encrypted at rest**: mobile uses the device's secure Keychain/Keystore to protect a locally generated key, and web uses a non-extractable key stored in the browser to encrypt everything before it touches disk
 - Because there's no cloud account behind it, you are always in full control of your own financial data — and also in charge of backing it up
-- See [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) for the full policy
 
 ### Works the way you do
 - One shared codebase for consistent behavior between the web app and the native mobile app (Android and iOS)
