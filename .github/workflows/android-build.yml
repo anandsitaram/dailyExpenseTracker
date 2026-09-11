@@ -51,15 +51,19 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x apps/mobile/android/gradlew
 
-      - name: Build release APK
+      - name: Build Android Release
         working-directory: apps/mobile/android
         run: |
+          chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/daily-expense-tracker.apk
 
-      - name: Upload APK artifact
+      - name: Locate APK
+        run: |
+          find apps/mobile/android/app/build/outputs -type f -name "*.apk" -print
+
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: daily-expense-tracker.apk
-          path: apps/mobile/android/app/build/outputs/apk/release/daily-expense-tracker.apk
-          retention-days: 3
+          name: daily-expense-tracker
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 2
