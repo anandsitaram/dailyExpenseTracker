@@ -39,11 +39,13 @@ jobs:
 
       - name: Build release APK
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/daily-expense-tracker.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: mobile/android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          name: daily-expense-tracker.apk
+          path: mobile/android/app/build/outputs/apk/release/daily-expense-tracker.apk
+          retention-days: 3
