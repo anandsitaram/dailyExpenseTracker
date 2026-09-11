@@ -454,6 +454,7 @@ function AppLockPanel({appLock,setAppLock,onUnlockNow}){
   if(!isValidPin(pinDraft))return alert('Use a 4-6 digit PIN');
   if(pinDraft!==pinConfirm)return alert("PINs don't match");
   await persistLock({enabled:true,mode:'pin',pin:pinDraft});
+  onUnlockNow();
   setPinDraft('');setPinConfirm('');setShowSetup(false);
  }
  async function turnOff(){

@@ -8,17 +8,9 @@ A simple, private, and fast way to track **where your money actually goes** — 
 - **GitHub repo:** [github.com/anandsitaram/dailyExpenseTracker](https://github.com/anandsitaram/dailyExpenseTracker)
 - **Mobile app:** Use the GitHub Actions Android workflow to build the APK and download the generated `daily-expense-tracker.apk` artifact from the workflow run
 
-### Demo video
+### Mobile Demo video
 
-![Daily Expense Tracker app demo](recordings/application-flow.gif)
-
-### Mobile preview
-
-| Dashboard | Expenses |
-| --- | --- |
-| <img src="screenshots/Screenshot_1789061627.png" alt="Daily Expense Tracker mobile dashboard" width="180"> | <img src="screenshots/Screenshot_1789061636.png" alt="Daily Expense Tracker mobile expenses" width="180"> |
-| <img src="screenshots/Screenshot_1789061696.png" alt="Daily Expense Tracker mobile dashboard" width="180"> | <img src="screenshots/Screenshot_1789061710.png" alt="Daily Expense Tracker mobile expenses" width="180"> |
-
+<img src="recordings/application-flow.gif" alt="Daily Expense Tracker app demo" width="820" height="480" />
 
 ## 📖 Why this exists
 
