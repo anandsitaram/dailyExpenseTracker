@@ -8,24 +8,24 @@ export const defaultCategories=[
 export const isIncomeCategory=(categories,id)=>categories.find(c=>c.id===id)?.income===true;
 export const paymentMethods=['Cash','UPI','Credit Card','Debit Card','Bank Transfer'];
 
-// Preset avatar choices so users can personalize their profile without needing camera/gallery permissions.
+// preset avatars, no camera/gallery permission needed
 export const avatarChoices=['🙂','😀','😎','🦁','🐱','🐶','🌸','⭐','💼','🎯','🧑\u200d💻','👩\u200d💻'];
 export const defaultProfile={firstName:'',lastName:'',nickName:'',email:'',avatar:'🙂',avatarImage:''};
 
-// No seeded/demo transactions - a fresh install starts empty and the UI guides the user to add their own data.
+// no demo data; fresh install starts empty
 export const emptyExpenses=[];
 
 export const formatINR=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(Number(n)||0);
 export const total=xs=>xs.reduce((s,x)=>s+Number(x.amount||0),0);
 
-// --- shared date / calendar helpers (used by both web and mobile calendar views) ---
+// --- date / calendar helpers ---
 export const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
 export const weekdayLabels=['Su','Mo','Tu','We','Th','Fr','Sa'];
 export const pad2=n=>String(n).padStart(2,'0');
 export const dateKey=(y,m,d)=>`${y}-${pad2(m+1)}-${pad2(d)}`;
 export const daysInMonth=(y,m)=>new Date(y,m+1,0).getDate();
 export const firstWeekdayOfMonth=(y,m)=>new Date(y,m,1).getDay();
-// Builds a 6x7 grid of cells (some from prev/next month) for a given year/month (0-indexed month)
+// 6x7 calendar grid for a given year/month (0-indexed)
 export function buildCalendarGrid(y,m){
  const total=daysInMonth(y,m),lead=firstWeekdayOfMonth(y,m);
  const prevTotal=daysInMonth(y,m-1<0?11:m-1);
@@ -38,7 +38,7 @@ export function buildCalendarGrid(y,m){
  return cells;
 }
 
-// --- excel export helper (shared row-shaping logic; actual xlsx write happens per-platform) ---
+// --- excel export helper ---
 export const toExpenseRows=(expenses,categories)=>expenses.map(e=>({
  Date:e.date,
  Amount:Number(e.amount)||0,
@@ -48,9 +48,7 @@ export const toExpenseRows=(expenses,categories)=>expenses.map(e=>({
  Note:e.note||''
 }));
 
-// --- backup / restore helpers (shared JSON shape + validation, used by both platforms) ---
-// A full local backup is the only way this fully-offline, no-server app can survive an
-// uninstall/reinstall or a device switch - there is no account/cloud sync to fall back on.
+// --- backup / restore helpers ---
 export const BACKUP_VERSION=1;
 export function buildBackupPayload({expenses,categories,budget,profile}){
  return JSON.stringify({app:'daily-expense-tracker',version:BACKUP_VERSION,exportedAt:new Date().toISOString(),expenses,categories,budget,profile},null,2);
@@ -65,18 +63,16 @@ export function parseBackupPayload(text){
   profile:data.profile&&typeof data.profile==='object'?{...defaultProfile,...data.profile}:defaultProfile
  };
 }
-// Peeks at backup text without fully parsing it, to tell an encrypted envelope (produced by
-// backupCrypto.js on each platform) apart from a legacy plain-JSON backup, before deciding
-// whether a password is needed at all.
+// detect encrypted vs legacy plain-JSON backup without fully parsing
 export function isEncryptedBackupText(text){
  try{const obj=JSON.parse(text);return !!(obj&&obj.encrypted===true)}catch(e){return false}
 }
 
-// --- app lock helpers (shared shape; platform-specific biometric wiring lives per-platform) ---
+// --- app lock helpers ---
 export const defaultAppLock={enabled:false,mode:'pin',pin:''};
 export const isValidPin=pin=>/^\d{4,6}$/.test(pin||'');
 
-// --- recurring expenses (shared date math + catch-up generation, used by both platforms) ---
+// --- recurring expenses ---
 export const recurringFrequencies=['daily','weekly','monthly'];
 export const frequencyLabels={daily:'Daily',weekly:'Weekly',monthly:'Monthly'};
 export function nextDueDate(dateStr,frequency){
@@ -86,12 +82,7 @@ export function nextDueDate(dateStr,frequency){
  else d.setMonth(d.getMonth()+1);
  return d.toISOString().slice(0,10);
 }
-// Pure function: given the saved recurring templates and the expenses that already exist,
-// works out which occurrences are due (from each template's start date up to `todayStr`,
-// catching up on any that were missed while the app was closed) and returns the new expense
-// rows to insert plus the templates with their `lastGeneratedDate` advanced. Doesn't mutate
-// its inputs, and skips any date that's already been generated (checked via `recurringId`),
-// so it's safe to call every time the app opens.
+// returns due occurrences (with catch-up) + advanced templates; pure, dedups via recurringId
 export function generateDueExpenses(templates,existingExpenses,todayStr){
  const newExpenses=[];
  const updatedTemplates=(templates||[]).map(t=>({...t}));
@@ -112,10 +103,7 @@ export function generateDueExpenses(templates,existingExpenses,todayStr){
  return {newExpenses,updatedTemplates};
 }
 
-// --- quick-add suggestions (derived automatically from your own logging history - no setup) ---
-// Groups expenses by an exact (description, category, amount) match, so a chip only appears
-// once you've genuinely logged that same thing more than once - it's a reflection of real
-// habits, not a manually curated list. Ties are broken by recency so the chips stay current.
+// --- quick-add suggestions: repeated (description, category, amount) matches, ties broken by recency ---
 export function computeQuickAddSuggestions(expenses,limit=6){
  const groups={};
  for(const e of expenses){
@@ -132,7 +120,7 @@ export function computeQuickAddSuggestions(expenses,limit=6){
   .slice(0,limit);
 }
 
-// --- spending streaks (consecutive calendar days with at least one expense logged) ---
+// --- spending streaks ---
 export function computeStreaks(expenses,todayStr){
  const days=[...new Set(expenses.map(e=>e.date))].sort();
  if(!days.length)return {current:0,longest:0};
@@ -143,7 +131,7 @@ export function computeStreaks(expenses,todayStr){
   if(diffDays===1){run++;longest=Math.max(longest,run)}
   else if(diffDays>1){run=1}
  }
- // current streak: walk back from today (or yesterday, so today not yet logged doesn't zero it out)
+ // walk back from today/yesterday so an unlogged today doesn't zero the streak
  const daySet=new Set(days);
  let current=0;
  let cursor=new Date(todayStr+'T00:00:00');
@@ -155,9 +143,7 @@ export function computeStreaks(expenses,todayStr){
  return {current,longest};
 }
 
-// --- month-over-month / year-over-year comparison (Analytics) ---
-// All amounts are for non-income expense categories only, matching how the rest of the app
-// defines "spending". monthStr is 'YYYY-MM'.
+// --- month/year-over-year comparison; expense categories only, monthStr is 'YYYY-MM' ---
 function monthTotal(expenses,categories,monthStr){
  return total(expenses.filter(e=>e.date.startsWith(monthStr)&&!isIncomeCategory(categories,e.category)));
 }
@@ -182,11 +168,7 @@ export function computePeriodComparison(expenses,categories,todayStr){
  };
 }
 
-// --- CSV / Excel import row normalization (shared by both platforms' xlsx-based readers) ---
-// Takes raw parsed rows (already turned into plain objects by XLSX.utils.sheet_to_json) and
-// maps them onto our expense shape, matching category by name (case-insensitive) with a
-// fallback, and skipping rows that don't have a usable amount/date. Returns both the usable
-// rows and a count of skipped ones so the UI can report "imported 40, skipped 2".
+// --- CSV/Excel import normalization: maps parsed rows to expense shape, matches category by name, skips invalid rows ---
 export function normalizeImportedRows(rows,categories){
  const byName={};
  categories.forEach(c=>{byName[c.name.trim().toLowerCase()]=c.id});

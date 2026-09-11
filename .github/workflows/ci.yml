@@ -57,10 +57,3 @@ jobs:
       - run: npm test
       - run: npm run lint
 
-  # Detox E2E (Android) needs a real emulator and a debug build, which is a heavier setup than
-  # the jobs above - see TESTING.md for how to configure and enable this job once a Detox
-  # config has been added and verified locally/on a self-hosted runner.
-  # mobile-e2e:
-  #   name: Mobile (Detox E2E - Android)
-  #   runs-on: ubuntu-latest
-  #   ...

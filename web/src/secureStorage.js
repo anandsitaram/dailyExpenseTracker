@@ -1,11 +1,4 @@
-// Encrypts data at rest in localStorage using AES-GCM.
-// The AES key itself is generated non-extractable and kept in IndexedDB, so no JS
-// (including this file) can ever read the raw key bytes - only use it via
-// crypto.subtle.encrypt/decrypt. This protects the data from anything that reads
-// browser storage files directly outside the page (extensions inspecting storage,
-// disk/forensic access, a shared/borrowed device). It does NOT protect against
-// malicious script running inside this same page's origin (XSS) - no client-only
-// storage scheme can, since that script could call subtle.decrypt too.
+// AES-GCM encryption at rest for localStorage. Key is non-extractable, kept in IndexedDB, used only via crypto.subtle. Doesn't protect against XSS in-origin.
 
 const DB_NAME='det-secure',STORE='keys',KEY_ID='det-master-key';
 

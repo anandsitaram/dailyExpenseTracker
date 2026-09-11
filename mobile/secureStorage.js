@@ -1,12 +1,4 @@
-// Encrypts data at rest in AsyncStorage using AES.
-// The AES key is generated once with a CSPRNG and stored via react-native-keychain, which
-// on iOS is backed by the Keychain and on Android by Keystore-backed EncryptedSharedPreferences.
-// AsyncStorage itself has no per-item size limit suited to a growing expense list, while
-// the Keychain/Keystore is meant for small secrets - so only the small key lives there,
-// and the bulk JSON is encrypted with it and stored in AsyncStorage.
-// This protects data from anything reading app storage files directly off the device
-// (a lost/stolen phone without the OS unlocked, a backup extraction tool). It does not
-// protect against a compromised/jailbroken device running code inside this app's process.
+// AES encryption at rest for AsyncStorage. Key lives in Keychain/Keystore (via react-native-keychain), bulk JSON encrypted with it in AsyncStorage.
 
 import 'react-native-get-random-values';
 import AsyncStorage from '@react-native-async-storage/async-storage';

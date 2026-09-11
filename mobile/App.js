@@ -49,12 +49,11 @@ function AppInner(){
   clearTimeout(snackbarTimer.current);setSnackbar(null);
  }
 
- // --- app lock (session-only; never persisted, so every cold start requires unlocking again) ---
+ // --- app lock (session-only, resets on cold start) ---
  const [unlocked,setUnlocked]=useState(false);
  const [biometrySupported,setBiometrySupported]=useState(false);
  useEffect(()=>{isBiometrySupported().then(setBiometrySupported)},[]);
- // Re-lock whenever the app is backgrounded, not just on cold start - otherwise "lock on open"
- // barely matters since Android/iOS keep the process alive for days between real cold starts.
+ // re-lock on backgrounding, not just cold start
  useEffect(()=>{
   const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&appLock.enabled)setUnlocked(false)});
   return()=>sub.remove();
@@ -69,12 +68,12 @@ function AppInner(){
   let cb=await secureGetItem('categoryBudgets',{});
   let al=await secureGetItem('appLock',defaultAppLock);
   let ob=await secureGetItem('onboardingDone',false);
-  // Catch up any recurring expenses that came due while the app was closed.
+  // catch up recurring expenses due since last open
   const {newExpenses,updatedTemplates}=generateDueExpenses(r,e,today());
   if(newExpenses.length)e=[...newExpenses,...e];
   setExpenses(e);setCats(c);setBudget(b);setProfile({...defaultProfile,...p});setRecurring(updatedTemplates);setCategoryBudgets(cb);setAppLock({...defaultAppLock,...al});setOnboardingDone(!!ob);setLoaded(true)
  })()},[]);
- // guarded by `loaded` so we never overwrite storage with the initial empty state before load finishes
+ // wait for loaded, else initial empty state overwrites storage
  useEffect(()=>{if(loaded)secureSetItem('expenses',expenses).catch(console.error)},[expenses,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('categories',cats).catch(console.error)},[cats,loaded]);
  useEffect(()=>{if(loaded)secureSetItem('budget',budget).catch(console.error)},[budget,loaded]);
@@ -101,12 +100,11 @@ function AppInner(){
   ).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,search,dateFrom,dateTo,amountMin,amountMax]);
  const dateFilterActive=dateFrom||dateTo||amountMin||amountMax;
  const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
- // Shown under the Add-expense form so tapping a calendar date still gives visibility
- // into what's already logged that day, without a detour through the Expenses tab.
+ // same-day expenses shown under Add-expense form
  const sameDayExpenses=useMemo(()=>expenses.filter(e=>e.date===date&&e.id!==editingId).sort((a,b)=>b.date.localeCompare(a.date)),[expenses,date,editingId]);
- // Per-category spend this month, for the category-budget progress bars in the Budget tab.
+ // per-category spend for Budget tab progress bars
  const categorySpend=useMemo(()=>{const m={};monthExpenseItems.forEach(e=>{m[e.category]=(m[e.category]||0)+Number(e.amount)});return m},[monthExpenseItems]);
- // Chips of things you've logged more than once, so adding them again is one tap.
+ // quick-add chips for repeated entries
  const quickAdd=useMemo(()=>computeQuickAddSuggestions(expenses,6),[expenses]);
  const streaks=useMemo(()=>computeStreaks(expenses,today()),[expenses]);
  const comparison=useMemo(()=>computePeriodComparison(expenses,cats,today()),[expenses,cats]);
@@ -114,16 +112,14 @@ function AppInner(){
  function resetForm(presetDate){setEditingId(null);setAmount('');setDesc('');setCategory(cats.find(c=>!c.income)?.id||cats[0]?.id||'food');setMethod('UPI');setDate(presetDate||today());setNote('');setRepeat('none')}
  function startEdit(e){setEditingId(e.id);setAmount(String(e.amount));setDesc(e.description||'');setCategory(e.category);setMethod(e.paymentMethod);setDate(e.date);setNote(e.note||'');setRepeat('none');setTab('add')}
  function startAdd(presetDate){resetForm(presetDate);setTab('add')}
- // Tapping a day on the dashboard calendar goes straight to Add expense (preset to that date)
- // instead of routing through the Expenses tab.
+ // calendar tap -> Add expense preset to that date
  function openDay(d){startAdd(d)}
  function save(){
   if(!Number(amount))return Alert.alert('Enter amount');
   if(editingId){
    setExpenses(expenses.map(e=>e.id===editingId?{...e,amount:Number(amount),description:desc||cats.find(c=>c.id===category)?.name,date,category,paymentMethod:method,note}:e))
   }else if(repeat!=='none'){
-   // Create a recurring template and immediately generate any occurrences due up to today
-   // (covers the case where the chosen start date is in the past).
+   // generate occurrences due up to today if start date is in the past
    const template={id:'r-'+Date.now(),amount:Number(amount),description:desc||cats.find(c=>c.id===category)?.name,category,paymentMethod:method,note,frequency:repeat,startDate:date,active:true,lastGeneratedDate:null};
    const {newExpenses,updatedTemplates}=generateDueExpenses([template],expenses,today());
    setRecurring([...recurring,...updatedTemplates]);
@@ -142,7 +138,7 @@ function AppInner(){
    return prev.filter(e=>e.id!==id);
   });
  }
- // One tap to re-log something you've bought before (Chai, auto fare, etc.) - no form at all.
+ // one-tap re-log of a past entry
  function addQuickExpense(sugg){
   const newExpense={id:Date.now().toString(),amount:sugg.amount,description:sugg.description,date:today(),category:sugg.category,paymentMethod:sugg.paymentMethod,note:''};
   setExpenses(prev=>[newExpense,...prev]);
@@ -191,9 +187,7 @@ function AppInner(){
    Alert.alert('Saved to',path);
   }
  }
- // Full data backup, password-encrypted before it ever touches disk - this app is fully
- // offline with no account or server, so this file is the only thing that can carry your
- // data across an uninstall/reinstall or a new phone.
+ // password-encrypted backup; only way to move data across reinstall/new phone
  async function exportBackup(){
   if(backupPassword.length<4)return Alert.alert('Set a backup password','Enter a password with at least 4 characters. You will need it again to restore this backup.');
   const plain=buildBackupPayload({expenses,categories:cats,budget,profile});
@@ -224,9 +218,7 @@ function AppInner(){
    }}
   ])
  }
- // CSV import for migrating from a spreadsheet. No document picker is installed, so - matching
- // the existing paste-based backup restore flow - the user copies their sheet as CSV text and
- // pastes it in; XLSX can parse plain CSV text directly, same library already used for export.
+ // CSV import via paste (no document picker installed); xlsx parses raw CSV text
  function importCSV(){
   if(!importText.trim())return Alert.alert('Paste CSV first','Copy your spreadsheet as CSV text (e.g. from Excel or Google Sheets) and paste it here.');
   let imported,skipped;
@@ -531,8 +523,6 @@ function LockScreen({appLock,onUnlock}){
   if(appLock.mode==='biometric'&&!usePin){
    verifyBiometricUnlock().then(ok=>{if(ok)onUnlock();else setUsePin(true)});
   }
-  // Only re-run when the user switches back to biometric from the PIN fallback, not on
-  // every appLock/onUnlock identity change (onUnlock is a stable callback from the parent).
   // eslint-disable-next-line react-hooks/exhaustive-deps
  },[usePin]);
  function tryPin(){
@@ -598,9 +588,7 @@ const EmptyState=({icon,text,actionLabel,onAction})=><View style={s.empty}>
 const Row=({e,cats,onEdit,onDelete})=>{
  const c=cats.find(c=>c.id===e.category);
  const label=e.description||c?.name||'Uncategorized';
- // Swipe is a fast power-user shortcut, but the Edit/Delete text links stay visible too -
- // swipe gestures alone are easy to miss (and hard to reach for screen-reader users), so this
- // is a progressive enhancement rather than a replacement for the tappable controls.
+ // swipe is a shortcut; Edit/Delete links stay visible for discoverability/a11y
  const renderRightActions=()=><View style={{flexDirection:'row'}}>
   <TouchableOpacity style={s.swipeEdit} onPress={()=>onEdit(e)} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}><Pencil size={18} color="#fff"/></TouchableOpacity>
   <TouchableOpacity style={s.swipeDelete} onPress={()=>onDelete(e.id)} accessibilityRole="button" accessibilityLabel={`Delete ${label}`}><Trash2 size={18} color="#fff"/></TouchableOpacity>
@@ -661,12 +649,7 @@ function Calendar({year,month,spendByDay,onSelectDay,onPrev,onNext}){
  </View>
 }
 
-// NOTE ON TEXT WEIGHTS: numeric string font weights ('700','800') are not reliably rendered
-// by every Android OS version/device - on some it silently fails to draw the glyphs at all,
-// which is what caused labels and nav text to appear missing. 'bold' is the one weight RN
-// guarantees works everywhere, so every heavier style below uses that instead. Every text
-// style also sets an explicit `color` rather than relying on an inherited/default color, and
-// borders/backgrounds use higher-contrast tones so fields are clearly visible against white.
+// numeric font weights ('700'/'800') don't render on some Android versions; use 'bold'
 const GREEN='#5FA429',GREEN_TINT='#E8F3D9',DARK='#151717',BG='#F0F2E9',BORDER='#C9D0BC',MUTED='#586154';
 const s=StyleSheet.create({
  safe:{flex:1,backgroundColor:BG},

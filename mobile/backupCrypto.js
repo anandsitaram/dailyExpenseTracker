@@ -1,10 +1,4 @@
-// Password-based encryption for backup EXPORT FILES - separate from secureStorage.js, which
-// encrypts data at rest with a device-held key the user never sees or types. A backup file is
-// meant to leave the device (saved to Drive, emailed to yourself, kept on a laptop), so it's
-// protected with a password the user chooses and remembers instead - the app never stores
-// this password anywhere. Uses PBKDF2 (100k iterations, SHA-256) to turn the password into an
-// AES-256 key, with a fresh random salt and IV per export so the same password never produces
-// the same ciphertext twice.
+// Password-based encryption for backup export files (separate from secureStorage.js's device-held key). PBKDF2 (100k, SHA-256) -> AES-256, random salt+IV per export.
 import CryptoJS from 'crypto-js';
 
 const PBKDF2_ITERATIONS=100000;

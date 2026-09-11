@@ -29,7 +29,7 @@ function App(){
  const [calYear,setCalYear]=useState(now.getFullYear());
  const [calMonth,setCalMonth]=useState(now.getMonth());
 
- // --- app lock (session-only; resets on every page load, and re-locks when the tab is hidden) ---
+ // --- app lock: resets on page load, re-locks when tab hidden ---
  const [unlocked,setUnlocked]=useState(false);
  useEffect(()=>{
   function onVisibility(){if(document.hidden&&appLock.enabled)setUnlocked(false)}
@@ -37,7 +37,7 @@ function App(){
   return()=>document.removeEventListener('visibilitychange',onVisibility);
  },[appLock.enabled]);
 
- // --- undo snackbar (used for both delete-undo and quick-add-undo) ---
+ // --- undo snackbar ---
  const [undoState,setUndoState]=useState(null); // {message,onUndo}
  const undoTimer=useRef(null);
  function flashUndo(message,onUndo){
@@ -51,7 +51,7 @@ function App(){
   clearTimeout(undoTimer.current);setUndoState(null);
  }
 
- // Load once on mount (decrypting from IndexedDB-backed key + localStorage ciphertext).
+ // load once on mount
  useEffect(()=>{(async()=>{
   const [e,c,b,p,cb,r,al,th,ob]=await Promise.all([
    secureGet('det-expenses',emptyExpenses),
@@ -64,13 +64,12 @@ function App(){
    secureGet('det-theme','light'),
    secureGet('det-onboardingDone',false)
   ]);
-  // Catch up any recurring expenses that came due while the app was closed.
+  // catch up recurring expenses due since last open
   const {newExpenses,updatedTemplates}=generateDueExpenses(r,e,today());
   const mergedExpenses=newExpenses.length?[...newExpenses,...e]:e;
   setExpenses(mergedExpenses);setCategories(c);setBudget(Number(b)||0);setProfile({...defaultProfile,...p});setCategoryBudgets(cb);setRecurring(updatedTemplates);setAppLock({...defaultAppLock,...al});setTheme(th==='dark'?'dark':'light');setOnboardingDone(!!ob);setLoaded(true)
  })()},[]);
- // Guarded by `loaded` so we never encrypt-and-overwrite storage with the initial
- // placeholder state before the real data has finished loading.
+ // wait for loaded, else placeholder state overwrites storage
  useEffect(()=>{if(loaded)secureSet('det-expenses',expenses).catch(console.error)},[expenses,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-categories',categories).catch(console.error)},[categories,loaded]);
  useEffect(()=>{if(loaded)secureSet('det-budget',budget).catch(console.error)},[budget,loaded]);
@@ -106,7 +105,7 @@ function App(){
  const singleDaySelected=dateFrom&&dateFrom===dateTo?dateFrom:null;
 
  const spendByDay=useMemo(()=>{const m={};expenses.forEach(e=>{m[e.date]=(m[e.date]||0)+Number(e.amount)});return m},[expenses]);
- // Chips of things you've logged more than once, so adding them again is one click.
+ // quick-add chips for repeated entries
  const quickAdd=useMemo(()=>computeQuickAddSuggestions(expenses,6),[expenses]);
  const streaks=useMemo(()=>computeStreaks(expenses,today()),[expenses]);
  const comparison=useMemo(()=>computePeriodComparison(expenses,categories,today()),[expenses,categories]);
@@ -131,7 +130,7 @@ function App(){
    return p.filter(e=>e.id!==id);
   });
  }
- // One click to re-log something you've bought before (Chai, auto fare, etc.) - no form at all.
+ // one-click re-log of a past entry
  function addQuickExpense(sugg){
   const newExpense={id:Date.now().toString(),amount:sugg.amount,description:sugg.description,date:today(),category:sugg.category,paymentMethod:sugg.paymentMethod,note:''};
   setExpenses(p=>[newExpense,...p]);
@@ -139,8 +138,7 @@ function App(){
  }
  function startAdd(presetDate){setEditing(null);setAddPresetDate(presetDate||null);setTab('add')}
  function startEdit(x){setEditing(x);setAddPresetDate(null);setTab('add')}
- // Tapping a day on the dashboard calendar goes straight to Add expense (preset to that date)
- // instead of routing through the Expenses tab.
+ // calendar tap -> Add expense preset to that date
  function openDay(d){startAdd(d)}
  function toggleRecurring(id){setRecurring(p=>p.map(t=>t.id===id?{...t,active:!t.active}:t))}
  function deleteRecurring(id){
@@ -161,9 +159,7 @@ function App(){
   XLSX.utils.book_append_sheet(wb,ws,'Expenses');
   XLSX.writeFile(wb,'daily-expenses.xlsx');
  }
- // Full data backup, password-encrypted before it ever leaves the browser - this app is fully
- // offline with no account or server, so this file is the only thing that can carry your data
- // across clearing browser data or switching devices.
+ // password-encrypted backup; only way to move data across a cleared browser/new device
  const [backupPassword,setBackupPassword]=useState(''),[restorePassword,setRestorePassword]=useState('');
  async function exportBackup(){
   if(backupPassword.length<4)return alert('Enter a backup password with at least 4 characters. You will need it again to restore this backup.');
@@ -190,8 +186,7 @@ function App(){
   reader.readAsText(file);
   e.target.value='';
  }
- // CSV/Excel import for migrating from a spreadsheet - reuses the same xlsx library already
- // used for export, which can read both .xlsx and .csv from the same file input.
+ // CSV/Excel import via same xlsx lib used for export
  function importSpreadsheet(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -509,8 +504,7 @@ function ExpenseForm({initial,presetDate,cats,allExpenses,onEditExpense,onDelete
  const [f,setF]=useState(initial||{id:null,date:presetDate||today(),amount:'',category:cats[0]?.id,description:'',paymentMethod:'UPI',note:''});
  const [repeat,setRepeat]=useState('none');
  const set=(k,v)=>setF({...f,[k]:v});
- // Shown below the form so tapping a calendar date still gives visibility into what's
- // already logged that day, without a detour through the Expenses tab.
+ // same-day expenses shown below the form
  const sameDay=(allExpenses||[]).filter(e=>e.date===f.date&&e.id!==f.id).sort((a,b)=>b.date.localeCompare(a.date));
  return <>
   <Panel title={initial?'Edit expense':'Add expense'}>
