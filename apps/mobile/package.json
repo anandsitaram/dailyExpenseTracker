@@ -22,6 +22,7 @@
     "react-native-get-random-values": "^1.11.0",
     "react-native-keychain": "^8.2.0",
     "react-native-share": "^11.0.4",
+    "@babel/runtime": "^7.20.0",
     "react-native-svg": "15.8.0",
     "xlsx": "^0.18.5"
   },
@@ -29,7 +30,6 @@
     "@babel/core": "^7.20.0",
     "@babel/eslint-parser": "^7.20.0",
     "@babel/preset-env": "^7.20.0",
-    "@babel/runtime": "^7.20.0",
     "@react-native/babel-preset": "0.74.87",
     "@react-native/gradle-plugin": "0.74.75",
     "@react-native/metro-config": "0.74.87",
