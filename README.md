@@ -7,7 +7,9 @@ A simple, private, and fast way to track **where your money actually goes** — 
 - **Web app:** [my-daily-expense-tracker.vercel.app](https://my-daily-expense-tracker.vercel.app/)
 - **Mobile app:** Use the GitHub Actions Android workflow to build the APK and download the generated `daily-expense-tracker.apk` artifact from the workflow run
 
-## 📸 Screenshots
+### Demo video
+
+<video src="recordings/flow.webm" controls muted playsinline width="820"></video>
 
 ### Mobile preview
 
