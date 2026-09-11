@@ -15,7 +15,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run web:dev -- --port 5183 --strictPort',
+    command: 'npm --prefix apps/web run dev -- --port 5183 --strictPort',
     url: 'http://localhost:5183',
     reuseExistingServer: !process.env.CI,
     timeout: 30000,

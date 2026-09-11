@@ -45,6 +45,9 @@
   },
   "jest": {
     "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@babel/runtime/(.*)$": "<rootDir>/node_modules/@babel/runtime/$1"
+    },
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/android/",
