@@ -20,7 +20,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -33,10 +35,10 @@ jobs:
 
       - name: Install root dependencies
         working-directory: .
-        run: npm ci
+        run: npm ci --include=dev --no-audit --no-fund
 
       - name: Install mobile dependencies
-        run: npm ci
+        run: npm ci --include=dev --no-audit --no-fund
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
