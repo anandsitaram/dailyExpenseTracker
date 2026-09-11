@@ -446,19 +446,19 @@ function Onboarding({onDone}){
 
 function AppLockPanel({appLock,setAppLock,onUnlockNow}){
  const [showSetup,setShowSetup]=useState(false),[pinDraft,setPinDraft]=useState(''),[pinConfirm,setPinConfirm]=useState('');
- function persistLock(nextLock){
+ async function persistLock(nextLock){
+  await secureSet('det-appLock',nextLock).catch(console.error);
   setAppLock(nextLock);
-  secureSet('det-appLock',nextLock).catch(console.error);
  }
- function savePin(){
+ async function savePin(){
   if(!isValidPin(pinDraft))return alert('Use a 4-6 digit PIN');
   if(pinDraft!==pinConfirm)return alert("PINs don't match");
-  persistLock({enabled:true,mode:'pin',pin:pinDraft});
+  await persistLock({enabled:true,mode:'pin',pin:pinDraft});
   setPinDraft('');setPinConfirm('');setShowSetup(false);
  }
- function turnOff(){
+ async function turnOff(){
   if(!confirm('Turn off app lock? Anyone who opens this browser tab will be able to see your data.'))return;
-  persistLock(defaultAppLock);
+  await persistLock(defaultAppLock);
   onUnlockNow();
  }
  return <Panel title="App lock">

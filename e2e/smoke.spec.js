@@ -45,6 +45,11 @@ test('app lock: setting a PIN locks the app on next load', async ({ page }) => {
   await page.getByPlaceholder('••••').first().fill('1234');
   await page.getByPlaceholder('••••').nth(1).fill('1234');
   await page.getByRole('button', { name: 'Save PIN' }).click();
+  await expect(page.getByText(/App lock is on/i)).toBeVisible();
+  await page.waitForFunction(() => {
+    const raw = window.localStorage.getItem('det-appLock');
+    return !!raw && raw.includes('"enabled":true') && raw.includes('"pin":"1234"');
+  });
 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Locked' })).toBeVisible();
