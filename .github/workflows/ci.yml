@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: npm run core:test
       - run: npm run typecheck
       - run: npm run format:check
@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: npm run web:build
       - run: npm run web:test
 
@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
       - uses: actions/upload-artifact@v4

@@ -1,10 +1,4 @@
 import React from 'react';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import AppInner from './AppInner.js';
-export default function App() {
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AppInner />
-    </GestureHandlerRootView>
-  );
-}
+export default function App(){return <GestureHandlerRootView style={{flex:1}}><AppInner/></GestureHandlerRootView>}

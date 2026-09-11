@@ -20,10 +20,7 @@ test('loads with an empty dashboard and no leftover demo data', async ({ page })
 
 test('can add an expense and see it on the dashboard', async ({ page }) => {
   await openApp(page);
-  await page
-    .getByRole('button', { name: /Add expense/i })
-    .first()
-    .click();
+  await page.getByRole('button', { name: /Add expense/i }).first().click();
 
   await page.getByLabel(/Amount/i).fill('250');
   await page.getByLabel('Description').fill('Playwright smoke test expense');
