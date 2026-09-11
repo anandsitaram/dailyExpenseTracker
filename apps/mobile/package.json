@@ -31,6 +31,7 @@
     "@babel/preset-env": "^7.20.0",
     "@babel/runtime": "^7.20.0",
     "@react-native/babel-preset": "0.74.87",
+    "@react-native/gradle-plugin": "0.74.75",
     "@react-native/metro-config": "0.74.87",
     "babel-jest": "^29.7.0",
     "eslint": "^8.19.0",
