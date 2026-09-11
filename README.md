@@ -9,7 +9,10 @@ A simple, private, and fast way to track **where your money actually goes** — 
 
 ### Demo video
 
-<video src="recordings/application-flow.mp4" controls muted playsinline width="820"></video>
+<video controls muted playsinline width="820">
+  <source src="recordings/application-flow.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ### Mobile preview
 
