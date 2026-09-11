@@ -11,8 +11,6 @@ A simple, private, and fast way to track **where your money actually goes** — 
 
 ### Mobile preview
 
-These mobile-sized previews show the responsive web app. The native Android app is also available for testing, with the current emulator screen shown below.
-
 | Dashboard | Expenses |
 | --- | --- |
 | <img src="screenshots/Screenshot_1789061627.png" alt="Daily Expense Tracker mobile dashboard" width="180"> | <img src="screenshots/Screenshot_1789061636.png" alt="Daily Expense Tracker mobile expenses" width="180"> |
