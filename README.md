@@ -10,7 +10,7 @@ A simple, private, and fast way to track **where your money actually goes** — 
 
 ### Mobile Demo video
 
-<img src="recordings/application-flow.gif" alt="Daily Expense Tracker app demo" width="820" height="480" />
+<img src="recordings/application-flow.gif" alt="Daily Expense Tracker app demo" width="300"/>
 
 ## 📖 Why this exists
 
