@@ -175,8 +175,7 @@ function AppInner() {
   }, [appLock.enabled]);
 
   const remaining = budget - spent;
-  const fmt = (v: number | string | undefined | null) =>
-    formatCurrency(v, profile.currency || 'INR');
+  const fmt = (v: number | string | undefined | null) => formatCurrency(v, profile.currency || 'INR');
   const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   // same-day expenses shown under Add-expense form
   const sameDayExpenses = useMemo(
@@ -199,7 +198,7 @@ function AppInner() {
     setRepeat('none');
   }
   function startEdit(e: Expense) {
-    setEditingId(e.id);
+    setEditingId(e.id ?? null);
     setAmount(String(e.amount));
     setDesc(e.description || '');
     setCategory(e.category);
@@ -410,10 +409,7 @@ function AppInner() {
     try {
       const wb = XLSX.read(importText, { type: 'string' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
-        raw: false,
-        defval: '',
-      });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { raw: false, defval: '' });
       ({ imported, skipped } = normalizeImportedRows(rows, cats));
     } catch (e) {
       return Alert.alert(
@@ -481,15 +477,17 @@ function AppInner() {
 
   const Nav = () => (
     <View style={s.nav}>
-      {[
-        ['home', Home, 'Home'],
-        ['expenses', ListChecks, 'Expenses'],
-        ['add', Plus, 'Add'],
-        ['analytics', PieChart, 'Analytics'],
-        ['budget', Target, 'Budget'],
-        ['categories', Tags, 'Categories'],
-        ['profile', User, 'Profile'],
-      ].map(([key, Icon, label]: [string, LucideIcon, string]) => (
+      {(
+        [
+          ['home', Home, 'Home'],
+          ['expenses', ListChecks, 'Expenses'],
+          ['add', Plus, 'Add'],
+          ['analytics', PieChart, 'Analytics'],
+          ['budget', Target, 'Budget'],
+          ['categories', Tags, 'Categories'],
+          ['profile', User, 'Profile'],
+        ] as [string, LucideIcon, string][]
+      ).map(([key, Icon, label]) => (
         <TouchableOpacity
           key={key}
           onPress={() => (key === 'add' ? startAdd() : setTab(key))}
@@ -975,7 +973,10 @@ function AppInner() {
                     </View>
                     <View style={s.track}>
                       <View
-                        style={[s.fill, { width: (spent ? (c.value / spent) * 100 : 0) + '%' }]}
+                        style={[
+                          s.fill,
+                          { width: `${spent ? (c.value / spent) * 100 : 0}%` },
+                        ]}
                       />
                     </View>
                   </View>
@@ -989,17 +990,11 @@ function AppInner() {
             </Section>
             <Section title="Daily spending">
               {Object.keys(
-                monthExpenseItems.reduce(
-                  (m: Record<string, number>, e) => ((m[e.date] = 1), m),
-                  {},
-                ),
+                monthExpenseItems.reduce((m: Record<string, number>, e) => ((m[e.date] = 1), m), {}),
               ).length ? (
                 Object.entries(
                   monthExpenseItems.reduce(
-                    (m: Record<string, number>, e) => (
-                      (m[e.date] = (m[e.date] || 0) + Number(e.amount)),
-                      m
-                    ),
+                    (m: Record<string, number>, e) => ((m[e.date] = (m[e.date] || 0) + Number(e.amount)), m),
                     {},
                   ),
                 )
@@ -1040,7 +1035,7 @@ function AppInner() {
               {budget > 0 ? (
                 <>
                   <View style={s.track}>
-                    <View style={[s.fill, pct >= 80 && s.fillWarn, { width: pct + '%' }]} />
+                    <View style={[s.fill, pct >= 80 && s.fillWarn, { width: `${pct}%` }]} />
                   </View>
                   <View style={s.rowTop}>
                     <Text style={s.bold}>{pct.toFixed(0)}% used</Text>
@@ -1083,7 +1078,11 @@ function AppInner() {
                         <>
                           <View style={s.track}>
                             <View
-                              style={[s.fill, catPct >= 80 && s.fillWarn, { width: catPct + '%' }]}
+                              style={[
+                                s.fill,
+                                catPct >= 80 && s.fillWarn,
+                                { width: `${catPct}%` },
+                              ]}
                             />
                           </View>
                           <Text style={s.hint}>

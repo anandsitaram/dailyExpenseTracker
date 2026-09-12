@@ -9,7 +9,7 @@ const KEYCHAIN_SERVICE = 'com.dailyexpensetracker.app.masterkey';
 let cachedKey: string | null = null;
 let keyPromise: Promise<string> | null = null;
 
-function randomHexKey(bytesLength) {
+function randomHexKey(bytesLength: number): string {
   const bytes = new Uint8Array(bytesLength);
   crypto.getRandomValues(bytes);
   return Array.from(bytes)

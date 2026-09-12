@@ -63,7 +63,7 @@ export interface BackupPayload {
   categories: Category[];
   budget: number;
   categoryBudgets?: Record<string, number>;
-  recurring?: RecurringExpense[];
+  recurring?: RecurringTemplate[];
   profile: Profile;
   currency?: string;
 }

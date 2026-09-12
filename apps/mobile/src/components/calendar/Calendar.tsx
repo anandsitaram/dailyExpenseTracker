@@ -78,7 +78,7 @@ export function Calendar({
                 s.calCell,
                 !c.inMonth && s.calOut,
                 key === todayKey && s.calToday,
-                amt && s.calSpend,
+                amt > 0 && s.calSpend,
               ]}
             >
               <Text style={s.calDay} maxFontSizeMultiplier={1.3}>

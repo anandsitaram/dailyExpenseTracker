@@ -3,7 +3,12 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["react-native", "jest"]
   },
-  "include": ["index.ts", "src/**/*", "__tests__/**/*"]
+  "include": [
+    "index.ts",
+    "src/**/*",
+    "__tests__/**/*"
+  ]
 }

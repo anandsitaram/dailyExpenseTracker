@@ -32,6 +32,8 @@
     "@babel/preset-env": "^7.20.0",
     "@react-native/babel-preset": "0.74.87",
     "@react-native/metro-config": "0.74.87",
+    "@react-native/typescript-config": "0.74.87",
+    "@types/jest": "^29.5.14",
     "babel-jest": "^29.7.0",
     "eslint": "^8.19.0",
     "eslint-plugin-react": "^7.34.0",
@@ -49,7 +51,10 @@
       "/node_modules/",
       "/android/",
       "/ios/"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
   },
   "engines": {
     "node": ">=18"

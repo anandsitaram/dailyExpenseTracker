@@ -47,7 +47,8 @@ async function getOrCreateKey(): Promise<CryptoKey> {
   return key;
 }
 
-const toB64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const toB64 = (buf: ArrayBuffer | Uint8Array) =>
+  btoa(String.fromCharCode(...new Uint8Array(buf)));
 const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export async function secureSet<T>(key: string, value: T): Promise<void> {

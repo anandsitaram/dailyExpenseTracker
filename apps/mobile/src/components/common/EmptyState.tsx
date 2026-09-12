@@ -10,6 +10,7 @@ export interface EmptyStateProps {
 }
 
 export const EmptyState = ({ icon, text, actionLabel, onAction }: EmptyStateProps) => (
+
   <View style={s.empty}>
     <Text style={s.emptyIcon}>{icon}</Text>
     <Text style={s.emptyText}>{text}</Text>

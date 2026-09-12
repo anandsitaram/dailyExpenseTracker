@@ -7,9 +7,9 @@ const root = process.cwd();
 
 test('phase 1-4 architecture artifacts exist', () => {
   for (const file of [
-    'apps/web/src/app/App.jsx',
-    'apps/mobile/src/app/AppInner.js',
-    'apps/core/src/index.js',
+    'apps/web/src/app/App.tsx',
+    'apps/mobile/src/app/AppInner.tsx',
+    'apps/core/src/index.ts',
     'apps/core/src/types.ts',
     'docs/architecture.md',
     'docs/testing-strategy.md',
@@ -22,8 +22,8 @@ test('phase 1-4 architecture artifacts exist', () => {
 });
 
 test('web and mobile consume the shared core', () => {
-  const web = fs.readFileSync(path.join(root, 'apps/web/src/app/App.jsx'), 'utf8');
-  const mobile = fs.readFileSync(path.join(root, 'apps/mobile/src/app/AppInner.js'), 'utf8');
+  const web = fs.readFileSync(path.join(root, 'apps/web/src/app/App.tsx'), 'utf8');
+  const mobile = fs.readFileSync(path.join(root, 'apps/mobile/src/app/AppInner.tsx'), 'utf8');
   assert.match(web, /core\/src\/index\.js/);
   assert.match(mobile, /core\/src\/index\.js/);
 });

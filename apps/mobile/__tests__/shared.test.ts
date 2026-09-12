@@ -221,13 +221,15 @@ describe('buildBackupPayload / parseBackupPayload round trip', () => {
       avatarImage: '',
     };
     const payload = buildBackupPayload({
-      expenses: [{ id: '1', amount: 10 }],
+      expenses: [{ id: '1', amount: 10, date: '2026-01-01', category: 'food' }],
       categories: defaultCategories,
       budget: 5000,
       profile,
     });
     const parsed = parseBackupPayload(payload);
-    expect(parsed.expenses).toEqual([{ id: '1', amount: 10 }]);
+    expect(parsed.expenses).toEqual([
+      { id: '1', amount: 10, date: '2026-01-01', category: 'food' },
+    ]);
     expect(parsed.budget).toBe(5000);
     expect(parsed.profile.nickName).toBe('Ana');
   });
@@ -449,7 +451,7 @@ describe('normalizeImportedRows', () => {
   test('falls back to a default category when the name does not match', () => {
     const rows = [{ Date: '2026-09-01', Amount: '100', Category: 'Nonexistent Category' }];
     const { imported } = normalizeImportedRows(rows, cats);
-    expect(imported[0].category).toBe(cats.find((c) => !c.income).id);
+    expect(imported[0].category).toBe(cats.find((c) => !c.income)?.id);
   });
   test('skips rows with a missing or zero amount', () => {
     const rows = [

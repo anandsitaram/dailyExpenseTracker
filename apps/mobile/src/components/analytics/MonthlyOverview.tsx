@@ -40,14 +40,14 @@ export function MonthlyOverview({ expenses, cats, currency = 'INR' }: MonthlyOve
             <Text style={s.muted}>{formatCurrency(r.expense, currency)}</Text>
           </View>
           <View style={s.track}>
-            <View style={[s.fill, { width: (r.expense / max) * 100 + '%' }]} />
+            <View style={[s.fill, { width: `${(r.expense / max) * 100}%` }]} />
           </View>
           <View style={[s.rowTop, { marginTop: 6 }]}>
             <Text style={s.muted}>Income</Text>
             <Text style={s.muted}>{formatCurrency(r.income, currency)}</Text>
           </View>
           <View style={s.track}>
-            <View style={[s.fill, s.fillWarn, { width: (r.income / max) * 100 + '%' }]} />
+            <View style={[s.fill, s.fillWarn, { width: `${(r.income / max) * 100}%` }]} />
           </View>
         </View>
       ))}

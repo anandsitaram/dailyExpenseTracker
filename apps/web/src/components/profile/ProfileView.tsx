@@ -16,7 +16,8 @@ export function Profile({ profile, setProfile }: ProfileProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setProfile((p) => ({ ...p, avatarImage: String(reader.result || '') }));
+    reader.onload = () =>
+      setProfile((p) => ({ ...p, avatarImage: String(reader.result || '') }));
     reader.readAsDataURL(file);
     e.target.value = '';
   }

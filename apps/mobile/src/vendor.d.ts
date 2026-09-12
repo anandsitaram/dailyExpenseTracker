@@ -1,6 +1,8 @@
-declare module 'crypto-js';
 declare module 'react-native-fs';
-declare module 'react-native-share';
-declare module 'react-native-keychain';
-declare module 'xlsx';
 declare module '*.png';
+
+// react-native-get-random-values polyfills a global.crypto.getRandomValues
+// at runtime; no upstream types are shipped for it.
+declare const crypto: {
+  getRandomValues: <T extends ArrayBufferView>(array: T) => T;
+};
