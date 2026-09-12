@@ -21,7 +21,13 @@ export const defaultCategories: Category[] = [
 export const isIncomeCategory = (categories: Category[], id: string): boolean =>
   categories.find((c) => c.id === id)?.income === true;
 
-export const paymentMethods: string[] = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Bank Transfer'];
+export const paymentMethods: string[] = [
+  'Cash',
+  'UPI',
+  'Credit Card',
+  'Debit Card',
+  'Bank Transfer',
+];
 
 export const avatarChoices: string[] = [
   '🙂',
@@ -66,7 +72,10 @@ export const supportedCurrencies: SupportedCurrency[] = [
   { code: 'AUD', symbol: 'A$', label: 'AUD (A$)' },
 ];
 
-export const formatCurrency = (n: number | string | undefined | null, currencyCode: string = 'INR'): string => {
+export const formatCurrency = (
+  n: number | string | undefined | null,
+  currencyCode: string = 'INR',
+): string => {
   const num = Number(n) || 0;
   const localeMap: Record<string, string> = {
     INR: 'en-IN',
@@ -89,7 +98,8 @@ export const formatCurrency = (n: number | string | undefined | null, currencyCo
   }
 };
 
-export const formatINR = (n: number | string | undefined | null): string => formatCurrency(n, 'INR');
+export const formatINR = (n: number | string | undefined | null): string =>
+  formatCurrency(n, 'INR');
 
 export const total = (xs: Array<{ amount: number | string }>): number =>
   xs.reduce((s, x) => s + Number(x.amount || 0), 0);
@@ -114,7 +124,8 @@ export const weekdayLabels: string[] = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'
 
 export const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-export const dateKey = (y: number, m: number, d: number): string => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+export const dateKey = (y: number, m: number, d: number): string =>
+  `${y}-${pad2(m + 1)}-${pad2(d)}`;
 
 export const todayDateKey = (date: Date = new Date()): string =>
   dateKey(date.getFullYear(), date.getMonth(), date.getDate());
@@ -144,7 +155,12 @@ export function buildCalendarGrid(y: number, m: number): CalendarCell[] {
     cells.push({ day: prevTotal - i, y: prevYear, m: prevMonth, inMonth: false });
   for (let d = 1; d <= totalDays; d++) cells.push({ day: d, y, m, inMonth: true });
   while (cells.length % 7 !== 0 || cells.length < 42)
-    cells.push({ day: cells.length - lead - totalDays + 1, y: nextYear, m: nextMonth, inMonth: false });
+    cells.push({
+      day: cells.length - lead - totalDays + 1,
+      y: nextYear,
+      m: nextMonth,
+      inMonth: false,
+    });
   return cells;
 }
 
@@ -274,7 +290,9 @@ export function generateDueExpenses(
   const updatedTemplates = (templates || []).map((t) => ({ ...t }));
   for (const t of updatedTemplates) {
     if (!t.active) continue;
-    let due: string = t.lastGeneratedDate ? nextDueDate(t.lastGeneratedDate, t.frequency) : t.startDate;
+    let due: string = t.lastGeneratedDate
+      ? nextDueDate(t.lastGeneratedDate, t.frequency)
+      : t.startDate;
     let guard = 0;
     while (due <= todayStr && guard < 366) {
       const exists =
@@ -309,7 +327,10 @@ export interface QuickAddSuggestion {
   lastDate: string;
 }
 
-export function computeQuickAddSuggestions(expenses: Expense[], limit: number = 6): QuickAddSuggestion[] {
+export function computeQuickAddSuggestions(
+  expenses: Expense[],
+  limit: number = 6,
+): QuickAddSuggestion[] {
   const groups: Record<string, QuickAddSuggestion> = {};
   for (const e of expenses) {
     const desc = (e.description || '').trim();
@@ -376,7 +397,11 @@ function pctChange(prev: number, cur: number): number | null {
   return ((cur - prev) / prev) * 100;
 }
 
-export function computePeriodComparison(expenses: Expense[], categories: Category[], todayStr: string) {
+export function computePeriodComparison(
+  expenses: Expense[],
+  categories: Category[],
+  todayStr: string,
+) {
   const [y, m] = todayStr.split('-').map(Number);
   const curMonth = `${y}-${pad2(m)}`;
   const prevDate = new Date(y, m - 2, 1);
@@ -397,7 +422,10 @@ export function computePeriodComparison(expenses: Expense[], categories: Categor
   };
 }
 
-export function normalizeImportedRows(rows: Array<Record<string, unknown>>, categories: Category[]) {
+export function normalizeImportedRows(
+  rows: Array<Record<string, unknown>>,
+  categories: Category[],
+) {
   const byName: Record<string, string> = {};
   categories.forEach((c) => {
     byName[c.name.trim().toLowerCase()] = c.id;

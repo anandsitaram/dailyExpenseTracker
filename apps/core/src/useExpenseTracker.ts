@@ -53,7 +53,9 @@ export function useExpenseTracker({
   const [amountMin, setAmountMin] = useState<string>('');
   const [amountMax, setAmountMax] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
-  const [undoState, setUndoState] = useState<{ message: string; callback: () => void } | null>(null);
+  const [undoState, setUndoState] = useState<{ message: string; callback: () => void } | null>(
+    null,
+  );
   const undoTimer = useRef<any>(null);
 
   useEffect(() => {
@@ -229,7 +231,11 @@ export function useExpenseTracker({
     setUndoState(null);
   }
 
-  function saveExpense(expense: Expense, repeat: string = 'none', editing: { id?: string } | null = null) {
+  function saveExpense(
+    expense: Expense,
+    repeat: string = 'none',
+    editing: { id?: string } | null = null,
+  ) {
     if (!editing && repeat !== 'none') {
       const template = {
         id: 'r-' + Date.now(),

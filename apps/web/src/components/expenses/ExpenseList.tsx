@@ -10,13 +10,7 @@ export interface ExpenseListProps {
   onDelete: (id: string | undefined) => void;
 }
 
-export function ExpenseList({
-  items,
-  cats,
-  currency = 'INR',
-  onEdit,
-  onDelete,
-}: ExpenseListProps) {
+export function ExpenseList({ items, cats, currency = 'INR', onEdit, onDelete }: ExpenseListProps) {
   return (
     <div>
       {items.map((e) => {

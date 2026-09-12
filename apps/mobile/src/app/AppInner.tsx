@@ -175,7 +175,8 @@ function AppInner() {
   }, [appLock.enabled]);
 
   const remaining = budget - spent;
-  const fmt = (v: number | string | undefined | null) => formatCurrency(v, profile.currency || 'INR');
+  const fmt = (v: number | string | undefined | null) =>
+    formatCurrency(v, profile.currency || 'INR');
   const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   // same-day expenses shown under Add-expense form
   const sameDayExpenses = useMemo(
@@ -409,7 +410,10 @@ function AppInner() {
     try {
       const wb = XLSX.read(importText, { type: 'string' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { raw: false, defval: '' });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+        raw: false,
+        defval: '',
+      });
       ({ imported, skipped } = normalizeImportedRows(rows, cats));
     } catch (e) {
       return Alert.alert(
@@ -973,10 +977,7 @@ function AppInner() {
                     </View>
                     <View style={s.track}>
                       <View
-                        style={[
-                          s.fill,
-                          { width: `${spent ? (c.value / spent) * 100 : 0}%` },
-                        ]}
+                        style={[s.fill, { width: `${spent ? (c.value / spent) * 100 : 0}%` }]}
                       />
                     </View>
                   </View>
@@ -990,11 +991,17 @@ function AppInner() {
             </Section>
             <Section title="Daily spending">
               {Object.keys(
-                monthExpenseItems.reduce((m: Record<string, number>, e) => ((m[e.date] = 1), m), {}),
+                monthExpenseItems.reduce(
+                  (m: Record<string, number>, e) => ((m[e.date] = 1), m),
+                  {},
+                ),
               ).length ? (
                 Object.entries(
                   monthExpenseItems.reduce(
-                    (m: Record<string, number>, e) => ((m[e.date] = (m[e.date] || 0) + Number(e.amount)), m),
+                    (m: Record<string, number>, e) => (
+                      (m[e.date] = (m[e.date] || 0) + Number(e.amount)),
+                      m
+                    ),
                     {},
                   ),
                 )
@@ -1078,11 +1085,7 @@ function AppInner() {
                         <>
                           <View style={s.track}>
                             <View
-                              style={[
-                                s.fill,
-                                catPct >= 80 && s.fillWarn,
-                                { width: `${catPct}%` },
-                              ]}
+                              style={[s.fill, catPct >= 80 && s.fillWarn, { width: `${catPct}%` }]}
                             />
                           </View>
                           <Text style={s.hint}>
