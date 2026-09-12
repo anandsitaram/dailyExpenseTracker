@@ -34,19 +34,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Verify React Native dependencies
+
+      - name: Compute version info
+        id: version
         run: |
-          echo "Node version:"
-          node --version
-
-          echo "npm version:"
-          npm --version
-
-          echo "Babel runtime:"
-          npm ls @babel/runtime
-
-          echo "Babel runtime resolution:"
-          node -e "console.log(require.resolve('@babel/runtime/helpers/interopRequireDefault'))"
+          VERSION_NAME=$(node -p "require('./package.json').version")
+          VERSION_CODE=${{ github.run_number }}
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
       - name: Make gradlew executable
         run: chmod +x apps/mobile/android/gradlew
@@ -55,15 +50,23 @@ jobs:
         working-directory: apps/mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon \
+            -PVERSION_NAME=${{ steps.version.outputs.name }} \
+            -PVERSION_CODE=${{ steps.version.outputs.code }}
 
       - name: Locate APK
         run: |
           find apps/mobile/android/app/build/outputs -type f -name "*.apk" -print
 
+      - name: Rename APK with version
+        run: |
+          mkdir -p dist
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk \
+             "dist/daily-expense-tracker-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}.apk"
+
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: daily-expense-tracker
-          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          name: daily-expense-tracker-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          path: dist/*.apk
           retention-days: 2
