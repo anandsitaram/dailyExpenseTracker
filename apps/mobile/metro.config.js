@@ -17,6 +17,15 @@ const config = {
       path.resolve(projectRoot, 'node_modules'),
       path.resolve(workspaceRoot, 'node_modules'),
     ],
+
+    // Force a single resolution for React and RN regardless of hoisting
+    extraNodeModules: {
+      react: path.resolve(projectRoot, 'node_modules/react'),
+      'react-native': path.resolve(projectRoot, 'node_modules/react-native'),
+    },
+
+    // Prevent Metro from walking up past projectRoot's node_modules for these
+    disableHierarchicalLookup: true,
   },
 };
 
