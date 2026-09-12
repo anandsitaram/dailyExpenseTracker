@@ -8,8 +8,8 @@ import {
   buildCalendarGrid,
   formatCurrency,
   todayDateKey,
-} from '../../../../core/src/index.js';
-import s, { DARK } from '../../styles/styles.js';
+} from '../../../../core/src/index';
+import s, { DARK } from '../../styles/styles';
 
 export interface CalendarProps {
   year: number;

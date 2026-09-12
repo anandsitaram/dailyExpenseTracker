@@ -1,1 +1,1 @@
-export { encryptBackupPayload, decryptBackupPayload } from '../../../core/src/backupCrypto.js';
+export { encryptBackupPayload, decryptBackupPayload } from '../../../core/src/backupCrypto';

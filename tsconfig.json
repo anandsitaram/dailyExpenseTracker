@@ -12,5 +12,9 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["apps/core/src/**/*", "apps/web/src/**/*", "apps/mobile/src/**/*"]
+  "include": [
+    "apps/core/src/**/*",
+    "apps/web/src/**/*",
+    "apps/mobile/src/**/*"
+  ]
 }

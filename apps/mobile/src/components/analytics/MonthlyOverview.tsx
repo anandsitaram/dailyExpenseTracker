@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text } from 'react-native';
-import { EmptyState } from '../common/EmptyState.js';
-import { isIncomeCategory, formatCurrency } from '../../../../core/src/index.js';
-import { Category, Expense } from '../../../../core/src/types.js';
-import s from '../../styles/styles.js';
+import { EmptyState } from '../common/EmptyState';
+import { isIncomeCategory, formatCurrency } from '../../../../core/src/index';
+import { Category, Expense } from '../../../../core/src/types';
+import s from '../../styles/styles';
 
 export interface MonthlyOverviewProps {
   expenses: Expense[];

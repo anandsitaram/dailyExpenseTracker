@@ -137,8 +137,7 @@ function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   const top = byCat[0];
-  const fmt = (v: number | string | undefined | null) =>
-    formatCurrency(v, profile.currency || 'INR');
+  const fmt = (v: number | string | undefined | null) => formatCurrency(v, profile.currency || 'INR');
 
   function saveExpense(x: Expense, repeat: string) {
     saveTrackedExpense(x, repeat, editing);
@@ -149,12 +148,7 @@ function App() {
     if (id) removeTrackedExpense(id);
   }
   // one-click re-log of a past entry
-  function addQuickExpense(sugg: {
-    description: string;
-    category: string;
-    amount: number;
-    paymentMethod?: string;
-  }) {
+  function addQuickExpense(sugg: { description: string; category: string; amount: number; paymentMethod?: string }) {
     addTrackedQuickExpense(sugg);
   }
   function startAdd(presetDate?: string | null) {

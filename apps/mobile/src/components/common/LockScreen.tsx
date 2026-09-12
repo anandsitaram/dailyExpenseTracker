@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { Lock } from 'lucide-react-native';
-import { verifyBiometricUnlock } from '../../services/index.js';
-import { AppLockConfig } from '../../../../core/src/index.js';
-import s, { DARK } from '../../styles/styles.js';
+import { verifyBiometricUnlock } from '../../services/index';
+import { AppLockConfig } from '../../../../core/src/index';
+import s, { DARK } from '../../styles/styles';
 
 export interface LockScreenProps {
   appLock: AppLockConfig;

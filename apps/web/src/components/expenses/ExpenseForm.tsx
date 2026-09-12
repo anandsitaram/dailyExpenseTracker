@@ -79,7 +79,10 @@ export function ExpenseForm({
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             if (Number(f.amount) > 0)
-              onSave({ ...f, amount: Number(f.amount), id: f.id || Date.now().toString() }, repeat);
+              onSave(
+                { ...f, amount: Number(f.amount), id: f.id || Date.now().toString() },
+                repeat,
+              );
           }}
         >
           <label>

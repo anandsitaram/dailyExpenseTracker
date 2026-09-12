@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Pencil, Trash2 } from 'lucide-react-native';
-import { formatCurrency, isIncomeCategory } from '../../../../core/src/index.js';
-import { Category, Expense } from '../../../../core/src/types.js';
-import s from '../../styles/styles.js';
+import { formatCurrency, isIncomeCategory } from '../../../../core/src/index';
+import { Category, Expense } from '../../../../core/src/types';
+import s from '../../styles/styles';
 
 export interface RowProps {
   e: Expense;

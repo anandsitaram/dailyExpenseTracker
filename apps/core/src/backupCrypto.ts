@@ -3,7 +3,7 @@ import {
   BACKUP_PBKDF2_ITERATIONS,
   buildBackupEnvelope,
   parseBackupEnvelope,
-} from './backupFormat.js';
+} from './backupFormat';
 
 function deriveKey(password: string, salt: CryptoJS.lib.WordArray) {
   return CryptoJS.PBKDF2(password, salt, {

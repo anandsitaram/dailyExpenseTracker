@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
-import s from '../../styles/styles.js';
+import s from '../../styles/styles';
 
 export interface PinSetupFormProps {
   pinDraft: string;

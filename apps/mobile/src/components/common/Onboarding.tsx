@@ -1,6 +1,6 @@
 import React from 'react';
 import { SafeAreaView, View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import s from '../../styles/styles.js';
+import s from '../../styles/styles';
 
 export interface OnboardingProps {
   onDone: () => void;

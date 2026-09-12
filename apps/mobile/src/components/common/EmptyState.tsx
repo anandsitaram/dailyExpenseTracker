@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import s from '../../styles/styles.js';
+import s from '../../styles/styles';
 
 export interface EmptyStateProps {
   icon: string;
@@ -10,6 +10,7 @@ export interface EmptyStateProps {
 }
 
 export const EmptyState = ({ icon, text, actionLabel, onAction }: EmptyStateProps) => (
+
   <View style={s.empty}>
     <Text style={s.emptyIcon}>{icon}</Text>
     <Text style={s.emptyText}>{text}</Text>
