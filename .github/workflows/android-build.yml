@@ -60,7 +60,7 @@ jobs:
       - name: Rename APK with version
         run: |
           mkdir -p dist
-          cp apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk \
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk \
              "dist/daily-expense-tracker-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}.apk"
 
       - name: Upload Android APK
