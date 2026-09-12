@@ -90,3 +90,6 @@ No backend - no server, no database, no account. Everything's encrypted on-devic
 ## Stack
 
 React + Vite (web), React Native bare (mobile), Playwright (e2e), GitHub Actions (CI + Android build).
+
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
