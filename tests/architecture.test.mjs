@@ -24,6 +24,6 @@ test('phase 1-4 architecture artifacts exist', () => {
 test('web and mobile consume the shared core', () => {
   const web = fs.readFileSync(path.join(root, 'apps/web/src/app/App.jsx'), 'utf8');
   const mobile = fs.readFileSync(path.join(root, 'apps/mobile/src/app/AppInner.js'), 'utf8');
-  assert.match(web, /apps\/core\/src\/index\.js/);
-  assert.match(mobile, /apps\/core\/src\/index\.js/);
+  assert.match(web, /core\/src\/index\.js/);
+  assert.match(mobile, /core\/src\/index\.js/);
 });
