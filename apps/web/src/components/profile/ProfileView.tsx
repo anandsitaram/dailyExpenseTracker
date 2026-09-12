@@ -71,7 +71,7 @@ export function Profile({ profile, setProfile }: ProfileProps) {
           <input
             value={profile.firstName || ''}
             onChange={(e) => set('firstName', e.target.value)}
-            placeholder="Jane"
+            placeholder="Anand"
           />
         </label>
         <label>
@@ -79,7 +79,7 @@ export function Profile({ profile, setProfile }: ProfileProps) {
           <input
             value={profile.lastName || ''}
             onChange={(e) => set('lastName', e.target.value)}
-            placeholder="Doe"
+            placeholder="BS"
           />
         </label>
         <label>
@@ -96,7 +96,7 @@ export function Profile({ profile, setProfile }: ProfileProps) {
             type="email"
             value={profile.email || ''}
             onChange={(e) => set('email', e.target.value)}
-            placeholder="jane@example.com"
+            placeholder="anand@example.com"
           />
         </label>
         <label>

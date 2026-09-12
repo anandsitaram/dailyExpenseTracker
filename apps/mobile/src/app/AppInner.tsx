@@ -1210,14 +1210,14 @@ function AppInner() {
                 style={s.input}
                 value={profile.firstName || ''}
                 onChangeText={(x) => setProfile({ ...profile, firstName: x })}
-                placeholder="Jane"
+                placeholder="Anand"
               />
               <Text style={s.label}>Last name</Text>
               <TextInput
                 style={s.input}
                 value={profile.lastName || ''}
                 onChangeText={(x) => setProfile({ ...profile, lastName: x })}
-                placeholder="Doe"
+                placeholder="BS"
               />
               <Text style={s.label}>Nickname</Text>
               <TextInput
@@ -1233,7 +1233,7 @@ function AppInner() {
                 autoCapitalize="none"
                 value={profile.email || ''}
                 onChangeText={(x) => setProfile({ ...profile, email: x })}
-                placeholder="jane@example.com"
+                placeholder="anand@example.com"
               />
               <Text style={s.label}>Currency</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
