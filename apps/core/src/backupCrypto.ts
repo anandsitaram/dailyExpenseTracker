@@ -5,7 +5,7 @@ import {
   parseBackupEnvelope,
 } from './backupFormat.js';
 
-function deriveKey(password, salt) {
+function deriveKey(password: string, salt: CryptoJS.lib.WordArray) {
   return CryptoJS.PBKDF2(password, salt, {
     keySize: 256 / 32,
     iterations: BACKUP_PBKDF2_ITERATIONS,
@@ -14,7 +14,7 @@ function deriveKey(password, salt) {
 }
 
 // plainJsonStr -> JSON-stringified envelope (safe to write straight to a downloaded file)
-export function encryptBackupPayload(plainJsonStr, password) {
+export function encryptBackupPayload(plainJsonStr: string, password: string): string {
   const salt = CryptoJS.lib.WordArray.random(16);
   const iv = CryptoJS.lib.WordArray.random(16);
   const key = deriveKey(password, salt);
@@ -34,7 +34,7 @@ export function encryptBackupPayload(plainJsonStr, password) {
 }
 
 // envelope JSON string + password -> plain backup JSON string (throws on wrong password/corruption)
-export function decryptBackupPayload(envelopeStr, password) {
+export function decryptBackupPayload(envelopeStr: string, password: string): string {
   const env = parseBackupEnvelope(envelopeStr);
   const salt = CryptoJS.enc.Base64.parse(env.salt);
   const iv = CryptoJS.enc.Base64.parse(env.iv);

@@ -6,8 +6,8 @@ import * as Keychain from 'react-native-keychain';
 import CryptoJS from 'crypto-js';
 
 const KEYCHAIN_SERVICE = 'com.dailyexpensetracker.app.masterkey';
-let cachedKey = null;
-let keyPromise = null;
+let cachedKey: string | null = null;
+let keyPromise: Promise<string> | null = null;
 
 function randomHexKey(bytesLength) {
   const bytes = new Uint8Array(bytesLength);
@@ -44,13 +44,13 @@ async function loadOrCreateKey() {
   return key;
 }
 
-export async function secureSetItem(key, value) {
+export async function secureSetItem<T>(key: string, value: T): Promise<void> {
   const masterKey = await getOrCreateKey();
   const cipher = CryptoJS.AES.encrypt(JSON.stringify(value), masterKey).toString();
   await AsyncStorage.setItem(key, cipher);
 }
 
-export async function secureGetItem(key, fallback = null) {
+export async function secureGetItem<T>(key: string, fallback: T): Promise<T> {
   const raw = await AsyncStorage.getItem(key);
   if (!raw) return fallback;
   try {

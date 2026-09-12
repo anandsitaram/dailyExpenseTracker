@@ -3,9 +3,9 @@
 const DB_NAME = 'det-secure',
   STORE = 'keys',
   KEY_ID = 'det-master-key';
-let keyPromise = null;
+let keyPromise: Promise<CryptoKey> | null = null;
 
-function openDb() {
+function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
@@ -14,7 +14,7 @@ function openDb() {
   });
 }
 
-async function getKey() {
+async function getKey(): Promise<CryptoKey> {
   if (keyPromise) return keyPromise;
   keyPromise = getOrCreateKey();
   try {
@@ -25,9 +25,9 @@ async function getKey() {
   }
 }
 
-async function getOrCreateKey() {
+async function getOrCreateKey(): Promise<CryptoKey> {
   const db = await openDb();
-  const existing = await new Promise((res, rej) => {
+  const existing = await new Promise<CryptoKey | undefined>((res, rej) => {
     const tx = db.transaction(STORE, 'readonly');
     const r = tx.objectStore(STORE).get(KEY_ID);
     r.onsuccess = () => res(r.result);
@@ -38,7 +38,7 @@ async function getOrCreateKey() {
     'encrypt',
     'decrypt',
   ]);
-  await new Promise((res, rej) => {
+  await new Promise<void>((res, rej) => {
     const tx = db.transaction(STORE, 'readwrite');
     tx.objectStore(STORE).put(key, KEY_ID);
     tx.oncomplete = () => res();
@@ -47,10 +47,10 @@ async function getOrCreateKey() {
   return key;
 }
 
-const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const toB64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-export async function secureSet(key, value) {
+export async function secureSet<T>(key: string, value: T): Promise<void> {
   const cryptoKey = await getKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const enc = new TextEncoder().encode(JSON.stringify(value));
@@ -58,7 +58,7 @@ export async function secureSet(key, value) {
   localStorage.setItem(key, JSON.stringify({ iv: toB64(iv), data: toB64(cipher) }));
 }
 
-export async function secureGet(key, fallback = null) {
+export async function secureGet<T>(key: string, fallback: T): Promise<T> {
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
   try {

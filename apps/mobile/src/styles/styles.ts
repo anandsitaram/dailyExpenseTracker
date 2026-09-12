@@ -306,6 +306,28 @@ const s = StyleSheet.create({
   onboardEmoji: { fontSize: 52, textAlign: 'center', marginBottom: 8 },
   onboardRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start', marginBottom: 22 },
   onboardIcon: { fontSize: 26 },
+  incomeRow: { borderLeftWidth: 3, borderLeftColor: '#3d6b12', paddingLeft: 6 },
+  pill: {
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    backgroundColor: BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginRight: 6,
+  },
+  pillActive: {
+    backgroundColor: DARK,
+    borderColor: DARK,
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: MUTED,
+  },
+  pillTextActive: {
+    color: '#fff',
+  },
 });
 
 export { DARK, GREEN, GREEN_TINT, BG, BORDER, MUTED };

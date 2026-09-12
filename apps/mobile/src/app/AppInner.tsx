@@ -25,6 +25,7 @@ import {
   defaultCategories,
   paymentMethods,
   avatarChoices,
+  formatCurrency,
   formatINR,
   monthNames,
   toExpenseRows,
@@ -37,6 +38,8 @@ import {
   frequencyLabels,
   normalizeImportedRows,
   todayDateKey,
+  supportedCurrencies,
+  total,
 } from '../../../core/src/index.js';
 import { useExpenseTracker } from '../../../core/src/useExpenseTracker.js';
 import {
@@ -51,6 +54,7 @@ import {
   Download,
   Upload,
 } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react';
 import {
   Section,
   Stat,
@@ -63,6 +67,7 @@ import {
   Onboarding,
 } from '../components/index.js';
 import s, { DARK } from '../styles/styles.js';
+import { Expense } from '../../../core/src/types.js';
 const today = todayDateKey;
 const CATEGORY_ICON_CHOICES = [
   '🏷️',
@@ -94,6 +99,8 @@ function AppInner() {
     setAppLock,
     profile,
     setProfile,
+    theme,
+    setTheme,
     onboardingDone,
     setOnboardingDone,
     loaded,
@@ -110,6 +117,8 @@ function AppInner() {
     setAmountMin,
     amountMax,
     setAmountMax,
+    typeFilter,
+    setTypeFilter,
     month,
     monthExpenseItems,
     monthTotal: spent,
@@ -131,8 +140,8 @@ function AppInner() {
     toggleRecurring: toggleTrackedRecurring,
     setCategoryBudget: setTrackedCategoryBudget,
   } = useExpenseTracker({ storage: { get: secureGetItem, set: secureSetItem } });
-  const [tab, setTab] = useState('home');
-  const [editingId, setEditingId] = useState(null);
+  const [tab, setTab] = useState<string>('home');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [amount, setAmount] = useState(''),
     [desc, setDesc] = useState(''),
     [category, setCategory] = useState('food'),
@@ -166,6 +175,8 @@ function AppInner() {
   }, [appLock.enabled]);
 
   const remaining = budget - spent;
+  const fmt = (v: number | string | undefined | null) =>
+    formatCurrency(v, profile.currency || 'INR');
   const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   // same-day expenses shown under Add-expense form
   const sameDayExpenses = useMemo(
@@ -177,7 +188,7 @@ function AppInner() {
   );
   // per-category spend for Budget tab progress bars
 
-  function resetForm(presetDate) {
+  function resetForm(presetDate?: string | null) {
     setEditingId(null);
     setAmount('');
     setDesc('');
@@ -187,23 +198,23 @@ function AppInner() {
     setNote('');
     setRepeat('none');
   }
-  function startEdit(e) {
+  function startEdit(e: Expense) {
     setEditingId(e.id);
     setAmount(String(e.amount));
     setDesc(e.description || '');
     setCategory(e.category);
-    setMethod(e.paymentMethod);
+    setMethod(e.paymentMethod || 'UPI');
     setDate(e.date);
     setNote(e.note || '');
     setRepeat('none');
     setTab('add');
   }
-  function startAdd(presetDate) {
+  function startAdd(presetDate?: string | null) {
     resetForm(presetDate);
     setTab('add');
   }
   // calendar tap -> Add expense preset to that date
-  function openDay(d) {
+  function openDay(d: string) {
     startAdd(d);
   }
   function save() {
@@ -224,11 +235,16 @@ function AppInner() {
     resetForm();
     setTab('expenses');
   }
-  function removeExpense(id) {
-    removeTrackedExpense(id);
+  function removeExpense(id: string | undefined) {
+    if (id) removeTrackedExpense(id);
   }
   // one-tap re-log of a past entry
-  function addQuickExpense(sugg) {
+  function addQuickExpense(sugg: {
+    description: string;
+    category: string;
+    amount: number;
+    paymentMethod?: string;
+  }) {
     addTrackedQuickExpense(sugg);
   }
   function addCategory() {
@@ -237,7 +253,7 @@ function AppInner() {
     setNewCat('');
     setNewCatIcon(CATEGORY_ICON_CHOICES[0]);
   }
-  function removeCategory(id) {
+  function removeCategory(id: string) {
     const count = expenses.filter((e) => e.category === id).length;
     const proceed = () => {
       setCats(cats.filter((c) => c.id !== id));
@@ -260,10 +276,10 @@ function AppInner() {
       proceed();
     }
   }
-  function toggleRecurring(id) {
+  function toggleRecurring(id: string) {
     toggleTrackedRecurring(id);
   }
-  function deleteRecurring(id) {
+  function deleteRecurring(id: string) {
     Alert.alert(
       'Delete recurring expense',
       'Past expenses it already created will stay - this only stops future ones.',
@@ -277,7 +293,7 @@ function AppInner() {
       ],
     );
   }
-  function setCategoryBudget(id, value) {
+  function setCategoryBudget(id: string, value: string | number) {
     setTrackedCategoryBudget(id, value);
   }
   async function exportExcel() {
@@ -389,11 +405,15 @@ function AppInner() {
         'Paste CSV first',
         'Copy your spreadsheet as CSV text (e.g. from Excel or Google Sheets) and paste it here.',
       );
-    let imported, skipped;
+    let imported: Expense[] = [];
+    let skipped = 0;
     try {
       const wb = XLSX.read(importText, { type: 'string' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+        raw: false,
+        defval: '',
+      });
       ({ imported, skipped } = normalizeImportedRows(rows, cats));
     } catch (e) {
       return Alert.alert(
@@ -444,7 +464,7 @@ function AppInner() {
     setPinConfirm('');
     setShowPinSetup(false);
   }
-  async function toggleBiometricMode(on) {
+  async function toggleBiometricMode(on: boolean) {
     if (on) {
       await enableBiometricUnlock();
       setAppLock({ ...appLock, mode: 'biometric' });
@@ -469,7 +489,7 @@ function AppInner() {
         ['budget', Target, 'Budget'],
         ['categories', Tags, 'Categories'],
         ['profile', User, 'Profile'],
-      ].map(([key, Icon, label]) => (
+      ].map(([key, Icon, label]: [string, LucideIcon, string]) => (
         <TouchableOpacity
           key={key}
           onPress={() => (key === 'add' ? startAdd() : setTab(key))}
@@ -540,13 +560,13 @@ function AppInner() {
               <View style={s.heroRow}>
                 <View style={s.heroCol}>
                   <Text style={s.mutedLight}>Expenses</Text>
-                  <Text style={s.total}>{formatINR(spent)}</Text>
+                  <Text style={s.total}>{fmt(spent)}</Text>
                 </View>
                 <View style={s.heroDivider} />
                 <View style={s.heroCol}>
                   <Text style={s.mutedLight}>Remaining balance</Text>
                   <Text style={[s.total, budget > 0 && remaining < 0 && s.totalWarn]}>
-                    {budget > 0 ? formatINR(remaining) : '—'}
+                    {budget > 0 ? fmt(remaining) : '—'}
                   </Text>
                 </View>
               </View>
@@ -562,7 +582,7 @@ function AppInner() {
               )}
             </View>
             <View style={s.two}>
-              <Stat t="Income this month" v={formatINR(income)} />
+              <Stat t="Income this month" v={fmt(income)} />
               <Stat t="Top category" v={byCat[0]?.name || '—'} />
             </View>
             {streaks.current >= 2 && (
@@ -584,12 +604,12 @@ function AppInner() {
                         onPress={() => addQuickExpense(q)}
                         style={s.quickChip}
                         accessibilityRole="button"
-                        accessibilityLabel={`Add ${q.description}, ${formatINR(q.amount)}`}
+                        accessibilityLabel={`Add ${q.description}, ${fmt(q.amount)}`}
                       >
                         <Text style={s.quickChipName} numberOfLines={1}>
                           {c?.icon || '📦'} {q.description}
                         </Text>
-                        <Text style={s.quickChipAmount}>{formatINR(q.amount)}</Text>
+                        <Text style={s.quickChipAmount}>{fmt(q.amount)}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -605,6 +625,7 @@ function AppInner() {
                 year={calYear}
                 month={calMonth}
                 spendByDay={spendByDay}
+                currency={profile.currency || 'INR'}
                 onSelectDay={openDay}
                 onPrev={() => {
                   if (calMonth === 0) {
@@ -628,7 +649,14 @@ function AppInner() {
                   .sort((a, b) => b.date.localeCompare(a.date))
                   .slice(0, 6)
                   .map((e) => (
-                    <Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense} />
+                    <Row
+                      key={e.id}
+                      e={e}
+                      cats={cats}
+                      currency={profile.currency || 'INR'}
+                      onEdit={startEdit}
+                      onDelete={removeExpense}
+                    />
                   ))
               ) : (
                 <EmptyState
@@ -644,6 +672,28 @@ function AppInner() {
 
         {tab === 'expenses' && (
           <Section title="Expense history">
+            <View style={{ flexDirection: 'row', marginBottom: 10 }}>
+              <TouchableOpacity
+                onPress={() => setTypeFilter('all')}
+                style={[s.pill, typeFilter === 'all' && s.pillActive]}
+              >
+                <Text style={typeFilter === 'all' ? s.pillTextActive : s.pillText}>All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setTypeFilter('expense')}
+                style={[s.pill, typeFilter === 'expense' && s.pillActive]}
+              >
+                <Text style={typeFilter === 'expense' ? s.pillTextActive : s.pillText}>
+                  Expenses
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setTypeFilter('income')}
+                style={[s.pill, typeFilter === 'income' && s.pillActive]}
+              >
+                <Text style={typeFilter === 'income' ? s.pillTextActive : s.pillText}>Income</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={s.input}
               placeholder="Search description or note"
@@ -702,7 +752,7 @@ function AppInner() {
                     keyboardType="numeric"
                     value={amountMin}
                     onChangeText={setAmountMin}
-                    placeholder="₹0"
+                    placeholder="0"
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -724,11 +774,16 @@ function AppInner() {
                   setDateTo('');
                   setAmountMin('');
                   setAmountMax('');
+                  setTypeFilter('all');
                 }}
               >
                 <Text style={s.danger}>Clear filters</Text>
               </TouchableOpacity>
             )}
+            <Text style={[s.hint, { marginTop: 4, marginBottom: 8 }]}>
+              Showing {visibleExpenses.length} transaction{visibleExpenses.length === 1 ? '' : 's'}{' '}
+              · {fmt(total(visibleExpenses))} total
+            </Text>
             {singleDaySelected && (
               <TouchableOpacity
                 style={[s.secondary, s.btnRow]}
@@ -744,7 +799,14 @@ function AppInner() {
               </TouchableOpacity>
             )}
             {visibleExpenses.map((e) => (
-              <Row key={e.id} e={e} cats={cats} onEdit={startEdit} onDelete={removeExpense} />
+              <Row
+                key={e.id}
+                e={e}
+                cats={cats}
+                currency={profile.currency || 'INR'}
+                onEdit={startEdit}
+                onDelete={removeExpense}
+              />
             ))}
             {!visibleExpenses.length &&
               (expenses.length ? (
@@ -874,11 +936,11 @@ function AppInner() {
             <Section title="This month vs last month">
               <View style={s.rowTop}>
                 <Text style={s.bold}>This month</Text>
-                <Text style={s.bold}>{formatINR(comparison.curTotal)}</Text>
+                <Text style={s.bold}>{fmt(comparison.curTotal)}</Text>
               </View>
               <View style={s.rowTop}>
                 <Text style={s.muted}>Last month</Text>
-                <Text style={s.muted}>{formatINR(comparison.prevTotal)}</Text>
+                <Text style={s.muted}>{fmt(comparison.prevTotal)}</Text>
               </View>
               {comparison.momPct === null ? (
                 <Text style={s.hint}>Not enough history yet to compare to last month.</Text>
@@ -909,7 +971,7 @@ function AppInner() {
                       <Text style={s.bold}>
                         {c.icon} {c.name}
                       </Text>
-                      <Text style={s.bold}>{formatINR(c.value)}</Text>
+                      <Text style={s.bold}>{fmt(c.value)}</Text>
                     </View>
                     <View style={s.track}>
                       <View
@@ -926,10 +988,18 @@ function AppInner() {
               )}
             </Section>
             <Section title="Daily spending">
-              {Object.keys(monthExpenseItems.reduce((m, e) => ((m[e.date] = 1), m), {})).length ? (
+              {Object.keys(
+                monthExpenseItems.reduce(
+                  (m: Record<string, number>, e) => ((m[e.date] = 1), m),
+                  {},
+                ),
+              ).length ? (
                 Object.entries(
                   monthExpenseItems.reduce(
-                    (m, e) => ((m[e.date] = (m[e.date] || 0) + Number(e.amount)), m),
+                    (m: Record<string, number>, e) => (
+                      (m[e.date] = (m[e.date] || 0) + Number(e.amount)),
+                      m
+                    ),
                     {},
                   ),
                 )
@@ -937,7 +1007,7 @@ function AppInner() {
                   .map(([d, v]) => (
                     <View style={s.rowTop} key={d}>
                       <Text style={s.bold}>{d}</Text>
-                      <Text style={s.bold}>{formatINR(v)}</Text>
+                      <Text style={s.bold}>{fmt(v)}</Text>
                     </View>
                   ))
               ) : (
@@ -945,7 +1015,11 @@ function AppInner() {
               )}
             </Section>
             <Section title="Monthly overview (income vs expense)">
-              <MonthlyOverview expenses={expenses} cats={cats} />
+              <MonthlyOverview
+                expenses={expenses}
+                cats={cats}
+                currency={profile.currency || 'INR'}
+              />
             </Section>
           </>
         )}
@@ -954,7 +1028,7 @@ function AppInner() {
           <>
             <Section title="Monthly budget">
               <Text style={s.muted}>Spent</Text>
-              <Text style={s.big}>{formatINR(spent)}</Text>
+              <Text style={s.big}>{fmt(spent)}</Text>
               <Text style={s.muted}>Budget</Text>
               <TextInput
                 style={s.input}
@@ -970,7 +1044,7 @@ function AppInner() {
                   </View>
                   <View style={s.rowTop}>
                     <Text style={s.bold}>{pct.toFixed(0)}% used</Text>
-                    <Text style={s.bold}>{formatINR(Math.max(0, budget - spent))} remaining</Text>
+                    <Text style={s.bold}>{fmt(Math.max(0, budget - spent))} remaining</Text>
                   </View>
                   {pct >= 80 && (
                     <Text style={s.alert}>⚠️ You are approaching your monthly budget.</Text>
@@ -1013,7 +1087,7 @@ function AppInner() {
                             />
                           </View>
                           <Text style={s.hint}>
-                            {formatINR(catSpent)} of {formatINR(catBudget)} spent this month
+                            {fmt(catSpent)} of {fmt(catBudget)} spent this month
                           </Text>
                         </>
                       )}
@@ -1031,7 +1105,7 @@ function AppInner() {
                       <View style={{ flex: 1 }}>
                         <Text style={s.bold}>{t.description}</Text>
                         <Text style={s.muted}>
-                          {frequencyLabels[t.frequency]} · {formatINR(t.amount)}
+                          {frequencyLabels[t.frequency]} · {fmt(t.amount)}
                           {!t.active ? ' · Paused' : ''}
                         </Text>
                       </View>
@@ -1128,7 +1202,7 @@ function AppInner() {
                 ))}
               </View>
             </Section>
-            <Section title="Profile">
+            <Section title="Profile & Preferences">
               <Text style={s.label}>First name</Text>
               <TextInput
                 style={s.input}
@@ -1159,9 +1233,35 @@ function AppInner() {
                 onChangeText={(x) => setProfile({ ...profile, email: x })}
                 placeholder="jane@example.com"
               />
+              <Text style={s.label}>Currency</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {supportedCurrencies.map((c) => (
+                  <TouchableOpacity
+                    key={c.code}
+                    onPress={() => setProfile({ ...profile, currency: c.code })}
+                    style={[s.chip, (profile.currency || 'INR') === c.code && s.selected]}
+                  >
+                    <Text style={s.chipText}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <Text style={s.label}>Appearance</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setTheme('light')}
+                  style={[s.chip, theme === 'light' && s.selected]}
+                >
+                  <Text style={s.chipText}>☀ Light</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setTheme('dark')}
+                  style={[s.chip, theme === 'dark' && s.selected]}
+                >
+                  <Text style={s.chipText}>🌙 Dark</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={s.hint}>
-                Saved automatically, and encrypted at rest like the rest of your data. Set a
-                nickname to personalize your dashboard greeting.
+                Saved automatically, and encrypted at rest like the rest of your data.
               </Text>
             </Section>
             <Section title="App lock">

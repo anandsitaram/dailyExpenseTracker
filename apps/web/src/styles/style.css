@@ -888,3 +888,28 @@ header p {
 .onboardWrap button {
   width: 100%;
 }
+
+.incomeItem {
+  border-left: 3px solid #2e7d32;
+}
+.incomeAmount {
+  color: #2e7d32 !important;
+}
+:root[data-theme='dark'] .incomeAmount {
+  color: #81c784 !important;
+}
+.filterPills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.filterPills button {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 20px;
+}
+.filterPills button.active {
+  background: var(--green);
+  color: #ffffff;
+  border-color: var(--green);
+}

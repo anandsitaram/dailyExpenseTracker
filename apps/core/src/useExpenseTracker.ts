@@ -12,30 +12,51 @@ import {
   isIncomeCategory,
   total,
   todayDateKey,
+  AppLockConfig,
 } from './index.js';
+import { Category, Expense, Profile, RecurringTemplate } from './types.js';
 
-export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError } = {}) {
-  const get = storage?.get || (async (_, fallback) => fallback);
+export interface StorageAdapter {
+  get: <T>(key: string, fallback: T) => Promise<T>;
+  set: <T>(key: string, value: T) => Promise<void>;
+}
+
+export interface UseExpenseTrackerOptions {
+  storage?: StorageAdapter;
+  initialTheme?: 'light' | 'dark';
+  onLoadError?: (error: unknown) => void;
+}
+
+export function useExpenseTracker({
+  storage,
+  initialTheme = 'light',
+  onLoadError,
+}: UseExpenseTrackerOptions = {}) {
+  const get = storage?.get || (async <T>(_: string, fallback: T): Promise<T> => fallback);
   const set = storage?.set || (async () => {});
-  const [expenses, setExpenses] = useState(emptyExpenses);
-  const [categories, setCategories] = useState(defaultCategories);
-  const [budget, setBudget] = useState(0);
-  const [categoryBudgets, setCategoryBudgets] = useState({});
-  const [recurring, setRecurring] = useState([]);
-  const [appLock, setAppLock] = useState(defaultAppLock);
-  const [profile, setProfile] = useState(defaultProfile);
-  const [theme, setTheme] = useState(initialTheme);
-  const [onboardingDone, setOnboardingDone] = useState(true);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [amountMin, setAmountMin] = useState('');
-  const [amountMax, setAmountMax] = useState('');
-  const [undoState, setUndoState] = useState(null);
-  const undoTimer = useRef(null);
+
+  const [expenses, setExpenses] = useState<Expense[]>(emptyExpenses);
+  const [categories, setCategories] = useState<Category[]>(defaultCategories);
+  const [budget, setBudget] = useState<number>(0);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [recurring, setRecurring] = useState<RecurringTemplate[]>([]);
+  const [appLock, setAppLock] = useState<AppLockConfig>(defaultAppLock);
+  const [profile, setProfile] = useState<Profile>(defaultProfile);
+  const [theme, setTheme] = useState<'light' | 'dark'>(initialTheme);
+  const [onboardingDone, setOnboardingDone] = useState<boolean>(true);
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState<string>('');
+  const [filter, setFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [amountMin, setAmountMin] = useState<string>('');
+  const [amountMax, setAmountMax] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
+  const [undoState, setUndoState] = useState<{ message: string; callback: () => void } | null>(
+    null,
+  );
+  const undoTimer = useRef<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +78,7 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
           get('budget', 0),
           get('profile', defaultProfile),
           get('categoryBudgets', {}),
-          get('recurring', []),
+          get('recurring', [] as RecurringTemplate[]),
           get('appLock', defaultAppLock),
           get('theme', initialTheme),
           get('onboardingDone', false),
@@ -91,7 +112,7 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
     };
   }, []);
 
-  const persisted = [
+  const persisted: Array<[string, any]> = [
     ['expenses', expenses],
     ['categories', categories],
     ['budget', budget],
@@ -102,6 +123,7 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
     ['theme', theme],
     ['onboardingDone', onboardingDone],
   ];
+
   useEffect(() => {
     if (!loaded) return;
     for (const [key, value] of persisted) set(key, value).catch(console.error);
@@ -147,13 +169,13 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
     [categories, monthExpenseItems],
   );
   const categorySpend = useMemo(() => {
-    const result = {};
+    const result: Record<string, number> = {};
     for (const expense of monthExpenseItems)
       result[expense.category] = (result[expense.category] || 0) + Number(expense.amount);
     return result;
   }, [monthExpenseItems]);
   const daily = useMemo(() => {
-    const result = {};
+    const result: Record<string, number> = {};
     for (const expense of monthExpenseItems)
       result[expense.date] = (result[expense.date] || 0) + Number(expense.amount);
     return Object.entries(result)
@@ -161,16 +183,20 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
       .map(([date, amount]) => ({ date: date.slice(5), amount }));
   }, [monthExpenseItems]);
   const spendByDay = useMemo(() => {
-    const result = {};
+    const result: Record<string, number> = {};
     for (const expense of expenses)
       result[expense.date] = (result[expense.date] || 0) + Number(expense.amount);
     return result;
   }, [expenses]);
+
   const visibleExpenses = useMemo(
     () =>
       expenses
-        .filter(
-          (expense) =>
+        .filter((expense) => {
+          const isInc = isIncomeCategory(categories, expense.category);
+          if (typeFilter === 'expense' && isInc) return false;
+          if (typeFilter === 'income' && !isInc) return false;
+          return (
             `${expense.description || ''} ${expense.note || ''}`
               .toLowerCase()
               .includes(search.toLowerCase()) &&
@@ -178,11 +204,13 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
             (!dateFrom || expense.date >= dateFrom) &&
             (!dateTo || expense.date <= dateTo) &&
             (!amountMin || Number(expense.amount) >= Number(amountMin)) &&
-            (!amountMax || Number(expense.amount) <= Number(amountMax)),
-        )
+            (!amountMax || Number(expense.amount) <= Number(amountMax))
+          );
+        })
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [expenses, search, filter, dateFrom, dateTo, amountMin, amountMax],
+    [expenses, categories, search, filter, typeFilter, dateFrom, dateTo, amountMin, amountMax],
   );
+
   const quickAdd = useMemo(() => computeQuickAddSuggestions(expenses, 6), [expenses]);
   const streaks = useMemo(() => computeStreaks(expenses, todayDateKey()), [expenses]);
   const comparison = useMemo(
@@ -190,18 +218,24 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
     [expenses, categories],
   );
 
-  function flashUndo(message, callback) {
+  function flashUndo(message: string, callback: () => void) {
     clearTimeout(undoTimer.current);
     setUndoState({ message, callback });
     undoTimer.current = setTimeout(() => setUndoState(null), 6000);
   }
+
   function undoLast() {
     if (!undoState) return;
     undoState.callback();
     clearTimeout(undoTimer.current);
     setUndoState(null);
   }
-  function saveExpense(expense, repeat = 'none', editing = null) {
+
+  function saveExpense(
+    expense: Expense,
+    repeat: string = 'none',
+    editing: { id?: string } | null = null,
+  ) {
     if (!editing && repeat !== 'none') {
       const template = {
         id: 'r-' + Date.now(),
@@ -224,7 +258,8 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
       setExpenses((current) => [expense, ...current]);
     }
   }
-  function removeExpense(id) {
+
+  function removeExpense(id: string) {
     setExpenses((current) => {
       const index = current.findIndex((expense) => expense.id === id);
       if (index === -1) return current;
@@ -235,8 +270,14 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
       return current.filter((expense) => expense.id !== id);
     });
   }
-  function addQuickExpense(suggestion) {
-    const expense = {
+
+  function addQuickExpense(suggestion: {
+    amount: number;
+    description: string;
+    category: string;
+    paymentMethod?: string;
+  }) {
+    const expense: Expense = {
       id: Date.now().toString(),
       amount: suggestion.amount,
       description: suggestion.description,
@@ -250,14 +291,16 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
       setExpenses((current) => current.filter((item) => item.id !== expense.id)),
     );
   }
-  function toggleRecurring(id) {
+
+  function toggleRecurring(id: string) {
     setRecurring((current) =>
       current.map((template) =>
         template.id === id ? { ...template, active: !template.active } : template,
       ),
     );
   }
-  function setCategoryBudget(id, value) {
+
+  function setCategoryBudget(id: string, value: string | number) {
     setCategoryBudgets((current) => ({ ...current, [id]: Number(value) || 0 }));
   }
 
@@ -302,13 +345,15 @@ export function useExpenseTracker({ storage, initialTheme = 'light', onLoadError
     remaining,
     byCat,
     categorySpend,
-    daily,
     spendByDay,
+    daily,
     visibleExpenses,
     quickAdd,
     streaks,
     comparison,
-    dateFilterActive: dateFrom || dateTo || amountMin || amountMax,
+    typeFilter,
+    setTypeFilter,
+    dateFilterActive: Boolean(dateFrom || dateTo || amountMin || amountMax || typeFilter !== 'all'),
     singleDaySelected: dateFrom && dateFrom === dateTo ? dateFrom : null,
     flashUndo,
     undoLast,

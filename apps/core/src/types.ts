@@ -32,6 +32,19 @@ export interface RecurringExpense {
   nextDate: string;
 }
 
+export interface RecurringTemplate {
+  id: string;
+  amount: number;
+  description?: string;
+  category: string;
+  paymentMethod?: PaymentMethod | string;
+  note?: string;
+  frequency: string;
+  startDate: string;
+  active: boolean;
+  lastGeneratedDate?: string | null;
+}
+
 export interface Profile {
   firstName: string;
   lastName: string;
@@ -39,6 +52,7 @@ export interface Profile {
   email: string;
   avatar: string;
   avatarImage: string;
+  currency?: string;
 }
 
 export interface BackupPayload {
@@ -51,4 +65,5 @@ export interface BackupPayload {
   categoryBudgets?: Record<string, number>;
   recurring?: RecurringExpense[];
   profile: Profile;
+  currency?: string;
 }

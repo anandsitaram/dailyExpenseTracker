@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import {
   PieChart as PieChartIcon,
   Home,
@@ -12,10 +12,12 @@ import {
   Flame,
   TrendingUp,
   TrendingDown,
+  LucideIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   defaultCategories,
+  formatCurrency,
   formatINR,
   total,
   monthNames,
@@ -25,6 +27,7 @@ import {
   frequencyLabels,
   normalizeImportedRows,
   todayDateKey,
+  toExpenseRows,
 } from '../../../core/src/index.js';
 import { useExpenseTracker } from '../../../core/src/useExpenseTracker.js';
 import { secureGet, secureSet } from '../services/storage.js';
@@ -45,9 +48,11 @@ import {
   LockScreen,
   Onboarding,
   AppLockPanel,
-} from '../components/index.jsx';
+} from '../components/index.js';
+import { Expense } from '../../../core/src/types.js';
 import '../styles/style.css';
 const today = todayDateKey;
+type TabKey = 'dashboard' | 'expenses' | 'analytics' | 'budget' | 'categories' | 'profile' | 'add';
 function App() {
   const {
     expenses,
@@ -82,6 +87,8 @@ function App() {
     setAmountMin,
     amountMax,
     setAmountMax,
+    typeFilter,
+    setTypeFilter,
     month,
     monthTotal,
     monthIncomeTotal,
@@ -109,9 +116,9 @@ function App() {
       set: (key, value) => secureSet(`det-${key}`, value),
     },
   });
-  const [tab, setTab] = useState('dashboard'),
-    [editing, setEditing] = useState(null);
-  const [addPresetDate, setAddPresetDate] = useState(null);
+  const [tab, setTab] = useState<TabKey>('dashboard'),
+    [editing, setEditing] = useState<Expense | null>(null);
+  const [addPresetDate, setAddPresetDate] = useState<string | null>(null);
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
@@ -130,45 +137,52 @@ function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   const top = byCat[0];
+  const fmt = (v: number | string | undefined | null) =>
+    formatCurrency(v, profile.currency || 'INR');
 
-  function saveExpense(x, repeat) {
+  function saveExpense(x: Expense, repeat: string) {
     saveTrackedExpense(x, repeat, editing);
     setEditing(null);
     setTab('expenses');
   }
-  function remove(id) {
-    removeTrackedExpense(id);
+  function remove(id: string | undefined) {
+    if (id) removeTrackedExpense(id);
   }
   // one-click re-log of a past entry
-  function addQuickExpense(sugg) {
+  function addQuickExpense(sugg: {
+    description: string;
+    category: string;
+    amount: number;
+    paymentMethod?: string;
+  }) {
     addTrackedQuickExpense(sugg);
   }
-  function startAdd(presetDate) {
+  function startAdd(presetDate?: string | null) {
     setEditing(null);
     setAddPresetDate(presetDate || null);
     setTab('add');
   }
-  function startEdit(x) {
+  function startEdit(x: Expense) {
     setEditing(x);
     setAddPresetDate(null);
     setTab('add');
   }
   // calendar tap -> Add expense preset to that date
-  function openDay(d) {
+  function openDay(d: string) {
     startAdd(d);
   }
-  function toggleRecurring(id) {
+  function toggleRecurring(id: string) {
     toggleTrackedRecurring(id);
   }
-  function deleteRecurring(id) {
+  function deleteRecurring(id: string) {
     if (
       confirm(
         'Delete this recurring expense? Past expenses it already created will stay - this only stops future ones.',
       )
     )
-      setRecurring((p) => p.filter((t) => t.id !== id));
+      setRecurring((p) => p.filter((t: { id: string }) => t.id !== id));
   }
-  function setCategoryBudget(id, value) {
+  function setCategoryBudget(id: string, value: string | number) {
     setTrackedCategoryBudget(id, value);
   }
 
@@ -228,12 +242,12 @@ function App() {
     a.download = 'daily-expense-backup.json';
     a.click();
   }
-  function importBackup(e) {
-    const file = e.target.files[0];
+  function importBackup(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
-      let text = reader.result;
+      let text = String(reader.result || '');
       if (isEncryptedBackupText(text)) {
         if (!restorePassword) {
           alert('Enter the backup password first - this backup is encrypted.');
@@ -277,16 +291,20 @@ function App() {
     e.target.value = '';
   }
   // CSV/Excel import via same xlsx lib used for export
-  function importSpreadsheet(e) {
-    const file = e.target.files[0];
+  function importSpreadsheet(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      let imported, skipped;
+      let imported: Expense[] = [];
+      let skipped = 0;
       try {
         const wb = XLSX.read(reader.result, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+          raw: false,
+          defval: '',
+        });
         ({ imported, skipped } = normalizeImportedRows(rows, categories));
       } catch (err) {
         alert(
@@ -341,14 +359,16 @@ function App() {
           <span>DailyExpense</span>
         </div>
         <div className="nav">
-          {[
-            ['dashboard', Home, 'Dashboard'],
-            ['expenses', ListChecks, 'Expenses'],
-            ['analytics', PieChartIcon, 'Analytics'],
-            ['budget', Target, 'Budget'],
-            ['categories', Tags, 'Categories'],
-            ['profile', User, 'Profile'],
-          ].map(([key, Icon, label]) => (
+          {(
+            [
+              ['dashboard', Home, 'Dashboard'],
+              ['expenses', ListChecks, 'Expenses'],
+              ['analytics', PieChartIcon, 'Analytics'],
+              ['budget', Target, 'Budget'],
+              ['categories', Tags, 'Categories'],
+              ['profile', User, 'Profile'],
+            ] as Array<[Exclude<TabKey, 'add'>, LucideIcon, string]>
+          ).map(([key, Icon, label]) => (
             <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
               <Icon size={17} strokeWidth={2.2} />
               {label}
@@ -392,14 +412,14 @@ function App() {
         {tab === 'dashboard' && (
           <>
             <section className="cards">
-              <Metric title="Expenses" value={formatINR(monthTotal)} highlight />
+              <Metric title="Expenses" value={fmt(monthTotal)} highlight />
               <Metric
                 title="Remaining balance"
-                value={budget > 0 ? formatINR(remaining) : '—'}
+                value={budget > 0 ? fmt(remaining) : '—'}
                 highlight
                 warn={budget > 0 && remaining < 0}
               />
-              <Metric title="Income this month" value={formatINR(monthIncomeTotal)} />
+              <Metric title="Income this month" value={fmt(monthIncomeTotal)} />
               <Metric title="Top category" value={top?.name || '—'} />
             </section>
             {budget <= 0 && (
@@ -426,12 +446,12 @@ function App() {
                         key={i}
                         className="quickChip"
                         onClick={() => addQuickExpense(q)}
-                        aria-label={`Add ${q.description}, ${formatINR(q.amount)}`}
+                        aria-label={`Add ${q.description}, ${fmt(q.amount)}`}
                       >
                         <span className="quickChipName">
                           {c?.icon || '📦'} {q.description}
                         </span>
-                        <span className="quickChipAmount">{formatINR(q.amount)}</span>
+                        <span className="quickChipAmount">{fmt(q.amount)}</span>
                       </button>
                     );
                   })}
@@ -444,14 +464,14 @@ function App() {
             <div className="grid">
               <Panel title="Spending trend">
                 {daily.length ? (
-                  <Trend data={daily} />
+                  <Trend data={daily} currency={profile.currency || 'INR'} />
                 ) : (
                   <EmptyState icon="📈" text="No spending yet this month." />
                 )}
               </Panel>
               <Panel title="Category breakdown">
                 {byCat.length ? (
-                  <Donut data={byCat} />
+                  <Donut data={byCat} currency={profile.currency || 'INR'} />
                 ) : (
                   <EmptyState icon="📊" text="No spending yet this month." />
                 )}
@@ -463,6 +483,7 @@ function App() {
                   year={calYear}
                   month={calMonth}
                   spendByDay={spendByDay}
+                  currency={profile.currency || 'INR'}
                   onSelectDay={openDay}
                   onPrev={() => {
                     if (calMonth === 0) {
@@ -487,6 +508,7 @@ function App() {
                       .sort((a, b) => b.date.localeCompare(a.date))
                       .slice(0, 6)}
                     cats={categories}
+                    currency={profile.currency || 'INR'}
                     onEdit={startEdit}
                     onDelete={remove}
                   />
@@ -509,7 +531,30 @@ function App() {
 
         {tab === 'expenses' && (
           <Panel title="Expense history">
-            <div className="toolbar">
+            <div className="toolbar" style={{ flexWrap: 'wrap', gap: '10px' }}>
+              <div className="filterPills">
+                <button
+                  type="button"
+                  className={typeFilter === 'all' ? 'active' : ''}
+                  onClick={() => setTypeFilter('all')}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className={typeFilter === 'expense' ? 'active' : ''}
+                  onClick={() => setTypeFilter('expense')}
+                >
+                  Expenses
+                </button>
+                <button
+                  type="button"
+                  className={typeFilter === 'income' ? 'active' : ''}
+                  onClick={() => setTypeFilter('income')}
+                >
+                  Income
+                </button>
+              </div>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -532,7 +577,7 @@ function App() {
                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
               </label>
               <label className="inlineDate">
-                Min ₹
+                Min
                 <input
                   type="number"
                   value={amountMin}
@@ -542,7 +587,7 @@ function App() {
                 />
               </label>
               <label className="inlineDate">
-                Max ₹
+                Max
                 <input
                   type="number"
                   value={amountMax}
@@ -559,6 +604,7 @@ function App() {
                     setDateTo('');
                     setAmountMin('');
                     setAmountMax('');
+                    setTypeFilter('all');
                   }}
                 >
                   Clear filters
@@ -571,18 +617,25 @@ function App() {
                 </>
               )}
             </div>
-            {singleDaySelected && (
-              <div className="panelHead" style={{ marginTop: -6 }}>
-                <span className="hint" style={{ margin: 0 }}>
-                  Showing {singleDaySelected} · {formatINR(total(visible))} total
-                </span>
+            <div className="panelHead" style={{ marginTop: 8 }}>
+              <span className="hint" style={{ margin: 0 }}>
+                Showing {visible.length} transaction{visible.length === 1 ? '' : 's'} ·{' '}
+                {fmt(total(visible))} total
+              </span>
+              {singleDaySelected && (
                 <button className="primary mini btnRow" onClick={() => startAdd(singleDaySelected)}>
                   <Plus size={14} /> Add expense for this date
                 </button>
-              </div>
-            )}
+              )}
+            </div>
             {visible.length ? (
-              <ExpenseList items={visible} cats={categories} onEdit={startEdit} onDelete={remove} />
+              <ExpenseList
+                items={visible}
+                cats={categories}
+                currency={profile.currency || 'INR'}
+                onEdit={startEdit}
+                onDelete={remove}
+              />
             ) : expenses.length ? (
               <EmptyState icon="🔍" text="No expenses match these filters." />
             ) : (
@@ -607,6 +660,7 @@ function App() {
             presetDate={addPresetDate}
             cats={categories}
             allExpenses={expenses}
+            currency={profile.currency || 'INR'}
             onEditExpense={startEdit}
             onDeleteExpense={remove}
             onCancel={() => setTab('expenses')}
@@ -619,14 +673,14 @@ function App() {
             <Panel title="This month vs last month">
               <div className="budgetMeta">
                 <b>This month</b>
-                <span>{formatINR(comparison.curTotal)}</span>
+                <span>{fmt(comparison.curTotal)}</span>
               </div>
               <div className="budgetMeta">
                 <span className="hint" style={{ margin: 0 }}>
                   Last month
                 </span>
                 <span className="hint" style={{ margin: 0 }}>
-                  {formatINR(comparison.prevTotal)}
+                  {fmt(comparison.prevTotal)}
                 </span>
               </div>
               {comparison.momPct === null ? (
@@ -666,7 +720,7 @@ function App() {
             <div className="grid">
               <Panel title="Category spending">
                 {byCat.length ? (
-                  <Donut data={byCat} />
+                  <Donut data={byCat} currency={profile.currency || 'INR'} />
                 ) : (
                   <EmptyState
                     icon="📊"
@@ -676,21 +730,30 @@ function App() {
               </Panel>
               <Panel title="Daily spending">
                 {daily.length ? (
-                  <Trend data={daily} />
+                  <Trend data={daily} currency={profile.currency || 'INR'} />
                 ) : (
                   <EmptyState icon="📅" text="No spending yet this month." />
                 )}
               </Panel>
             </div>
             <Panel title="Monthly overview (income vs expense)">
-              <MonthlyBars expenses={expenses} categories={categories} />
+              <MonthlyBars
+                expenses={expenses}
+                categories={categories}
+                currency={profile.currency || 'INR'}
+              />
             </Panel>
           </>
         )}
 
         {tab === 'budget' && (
           <>
-            <Budget budget={budget} setBudget={setBudget} spent={monthTotal} />
+            <Budget
+              budget={budget}
+              setBudget={setBudget}
+              spent={monthTotal}
+              currency={profile.currency || 'INR'}
+            />
             <Panel title="Category budgets">
               <p className="hint" style={{ margin: '0 0 14px' }}>
                 Set a monthly limit for individual categories, in addition to your overall budget
@@ -722,7 +785,7 @@ function App() {
                             <i style={{ width: catPct + '%' }} />
                           </div>
                           <p className="hint">
-                            {formatINR(catSpent)} of {formatINR(catBudget)} spent this month
+                            {fmt(catSpent)} of {fmt(catBudget)} spent this month
                           </p>
                         </>
                       )}

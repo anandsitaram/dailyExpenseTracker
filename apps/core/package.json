@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.js",
+  "main": "./src/index.ts",
   "types": "./src/types.ts",
   "exports": {
-    ".": "./src/index.js",
-    "./backupCrypto": "./src/backupCrypto.js",
-    "./backupFormat": "./src/backupFormat.js",
-    "./useExpenseTracker": "./src/useExpenseTracker.js",
+    ".": "./src/index.ts",
+    "./backupCrypto": "./src/backupCrypto.ts",
+    "./backupFormat": "./src/backupFormat.ts",
+    "./useExpenseTracker": "./src/useExpenseTracker.ts",
     "./types": "./src/types.ts"
   },
   "peerDependencies": {
