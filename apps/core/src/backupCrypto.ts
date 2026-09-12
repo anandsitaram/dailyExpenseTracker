@@ -1,9 +1,5 @@
 import CryptoJS from 'crypto-js';
-import {
-  BACKUP_PBKDF2_ITERATIONS,
-  buildBackupEnvelope,
-  parseBackupEnvelope,
-} from './backupFormat';
+import { BACKUP_PBKDF2_ITERATIONS, buildBackupEnvelope, parseBackupEnvelope } from './backupFormat';
 
 function deriveKey(password: string, salt: CryptoJS.lib.WordArray) {
   return CryptoJS.PBKDF2(password, salt, {
