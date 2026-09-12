@@ -9,7 +9,11 @@
     ".": "./src/index.js",
     "./backupCrypto": "./src/backupCrypto.js",
     "./backupFormat": "./src/backupFormat.js",
+    "./useExpenseTracker": "./src/useExpenseTracker.js",
     "./types": "./src/types.ts"
+  },
+  "peerDependencies": {
+    "react": ">=18"
   },
   "dependencies": {
     "crypto-js": "^4.2.0"

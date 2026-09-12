@@ -1,7 +1,20 @@
 name: Manual Tests
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Select the test suite to run
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - quality
+          - core
+          - web
+          - mobile
+          - e2e
 
 jobs:
   tests:
@@ -23,31 +36,43 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Core tests
+        if: inputs.suite == 'all' || inputs.suite == 'core'
         run: npm run core:test
 
       - name: Typecheck
+        if: inputs.suite == 'all' || inputs.suite == 'quality'
         run: npm run typecheck
 
+      - name: Format check
+        if: inputs.suite == 'all' || inputs.suite == 'quality'
+        run: npm run format:check
+
       - name: Web tests
+        if: inputs.suite == 'all' || inputs.suite == 'web'
         run: npm run web:test
 
       - name: Web build
+        if: inputs.suite == 'all' || inputs.suite == 'web'
         run: npm run web:build
 
       - name: Mobile tests
+        if: inputs.suite == 'all' || inputs.suite == 'mobile'
         run: npm test --prefix apps/mobile
 
       - name: Mobile lint
+        if: inputs.suite == 'all' || inputs.suite == 'mobile'
         run: npm run lint --prefix apps/mobile
 
       - name: Install Playwright browser
+        if: inputs.suite == 'all' || inputs.suite == 'e2e'
         run: npx playwright install --with-deps chromium
 
       - name: Playwright E2E tests
+        if: inputs.suite == 'all' || inputs.suite == 'e2e'
         run: npx playwright test
 
       - name: Upload Playwright report
-        if: always()
+        if: always() && (inputs.suite == 'all' || inputs.suite == 'e2e')
         uses: actions/upload-artifact@v4
         with:
           name: manual-playwright-report

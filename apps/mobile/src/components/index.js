@@ -9,7 +9,7 @@ import {
   dateKey,
   buildCalendarGrid,
   isIncomeCategory,
-} from '../../../../packages/core/src/index.js';
+} from '../../../core/src/index.js';
 import { verifyBiometricUnlock } from '../services/index.js';
 import s, { DARK } from '../styles/styles.js';
 const today = () => new Date().toISOString().slice(0, 10);

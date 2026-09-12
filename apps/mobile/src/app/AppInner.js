@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -25,13 +25,9 @@ import {
   defaultCategories,
   paymentMethods,
   avatarChoices,
-  defaultProfile,
-  emptyExpenses,
   formatINR,
-  total,
   monthNames,
   toExpenseRows,
-  isIncomeCategory,
   buildBackupPayload,
   parseBackupPayload,
   isEncryptedBackupText,
@@ -39,13 +35,10 @@ import {
   isValidPin,
   recurringFrequencies,
   frequencyLabels,
-  generateDueExpenses,
-  computeQuickAddSuggestions,
-  computeStreaks,
-  computePeriodComparison,
   normalizeImportedRows,
   todayDateKey,
-} from '../../../../packages/core/src/index.js';
+} from '../../../core/src/index.js';
+import { useExpenseTracker } from '../../../core/src/useExpenseTracker.js';
 import {
   Home,
   ListChecks,
@@ -86,15 +79,58 @@ const CATEGORY_ICON_CHOICES = [
   '🔧',
 ];
 function AppInner() {
-  const [expenses, setExpenses] = useState([]),
-    [cats, setCats] = useState(defaultCategories),
-    [budget, setBudget] = useState(0),
-    [loaded, setLoaded] = useState(false),
-    [loadError, setLoadError] = useState(null);
-  const [profile, setProfile] = useState(defaultProfile);
-  const [recurring, setRecurring] = useState([]);
-  const [categoryBudgets, setCategoryBudgets] = useState({});
-  const [appLock, setAppLock] = useState(defaultAppLock);
+  const {
+    expenses,
+    setExpenses,
+    categories: cats,
+    setCategories: setCats,
+    budget,
+    setBudget,
+    categoryBudgets,
+    setCategoryBudgets,
+    recurring,
+    setRecurring,
+    appLock,
+    setAppLock,
+    profile,
+    setProfile,
+    onboardingDone,
+    setOnboardingDone,
+    loaded,
+    loadError,
+    search,
+    setSearch,
+    filter,
+    setFilter,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    amountMin,
+    setAmountMin,
+    amountMax,
+    setAmountMax,
+    month,
+    monthExpenseItems,
+    monthTotal: spent,
+    monthIncomeTotal: income,
+    byCat,
+    categorySpend,
+    spendByDay,
+    visibleExpenses,
+    dateFilterActive,
+    singleDaySelected,
+    quickAdd,
+    streaks,
+    comparison,
+    undoState: snackbar,
+    undoLast: dismissSnackbarAndUndo,
+    saveExpense: saveTrackedExpense,
+    removeExpense: removeTrackedExpense,
+    addQuickExpense: addTrackedQuickExpense,
+    toggleRecurring: toggleTrackedRecurring,
+    setCategoryBudget: setTrackedCategoryBudget,
+  } = useExpenseTracker({ storage: { get: secureGetItem, set: secureSetItem } });
   const [tab, setTab] = useState('home');
   const [editingId, setEditingId] = useState(null);
   const [amount, setAmount] = useState(''),
@@ -106,35 +142,14 @@ function AppInner() {
     [repeat, setRepeat] = useState('none');
   const [newCat, setNewCat] = useState(''),
     [newCatIcon, setNewCatIcon] = useState(CATEGORY_ICON_CHOICES[0]);
-  const [search, setSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState(''),
-    [dateTo, setDateTo] = useState(''),
-    [amountMin, setAmountMin] = useState(''),
-    [amountMax, setAmountMax] = useState(''),
-    [showDateFilter, setShowDateFilter] = useState(false);
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const [restoreText, setRestoreText] = useState(''),
     [backupPassword, setBackupPassword] = useState(''),
     [restorePassword, setRestorePassword] = useState('');
   const [importText, setImportText] = useState('');
-  const [onboardingDone, setOnboardingDone] = useState(true);
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear()),
     [calMonth, setCalMonth] = useState(now.getMonth());
-
-  // --- undo snackbar (used for both delete-undo and quick-add-undo) ---
-  const [snackbar, setSnackbar] = useState(null); // {message,onUndo}
-  const snackbarTimer = useRef(null);
-  function showSnackbar(message, onUndo) {
-    clearTimeout(snackbarTimer.current);
-    setSnackbar({ message, onUndo });
-    snackbarTimer.current = setTimeout(() => setSnackbar(null), 6000);
-  }
-  function dismissSnackbarAndUndo() {
-    if (!snackbar) return;
-    snackbar.onUndo();
-    clearTimeout(snackbarTimer.current);
-    setSnackbar(null);
-  }
 
   // --- app lock (session-only, resets on cold start) ---
   const [unlocked, setUnlocked] = useState(false);
@@ -150,99 +165,8 @@ function AppInner() {
     return () => sub.remove();
   }, [appLock.enabled]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        let e = await secureGetItem('expenses', emptyExpenses);
-        let c = await secureGetItem('categories', defaultCategories);
-        let b = Number(await secureGetItem('budget', 0));
-        let p = await secureGetItem('profile', defaultProfile);
-        let r = await secureGetItem('recurring', []);
-        let cb = await secureGetItem('categoryBudgets', {});
-        let al = await secureGetItem('appLock', defaultAppLock);
-        let ob = await secureGetItem('onboardingDone', false);
-        const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
-        if (newExpenses.length) e = [...newExpenses, ...e];
-        setExpenses(e);
-        setCats(c);
-        setBudget(b);
-        setProfile({ ...defaultProfile, ...p });
-        setRecurring(updatedTemplates);
-        setCategoryBudgets(cb);
-        setAppLock({ ...defaultAppLock, ...al });
-        setOnboardingDone(!!ob);
-        setLoaded(true);
-      } catch (error) {
-        console.error('Failed to load encrypted app data', error);
-        setLoadError('Unable to unlock your saved data. Restore a backup or reload the app.');
-      }
-    })();
-  }, []);
-  // wait for loaded, else initial empty state overwrites storage
-  useEffect(() => {
-    if (loaded) secureSetItem('expenses', expenses).catch(console.error);
-  }, [expenses, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('categories', cats).catch(console.error);
-  }, [cats, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('budget', budget).catch(console.error);
-  }, [budget, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('profile', profile).catch(console.error);
-  }, [profile, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('recurring', recurring).catch(console.error);
-  }, [recurring, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('categoryBudgets', categoryBudgets).catch(console.error);
-  }, [categoryBudgets, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('appLock', appLock).catch(console.error);
-  }, [appLock, loaded]);
-  useEffect(() => {
-    if (loaded) secureSetItem('onboardingDone', onboardingDone).catch(console.error);
-  }, [onboardingDone, loaded]);
-
-  const month = expenses.filter((e) => e.date.startsWith(today().slice(0, 7)));
-  const monthExpenseItems = month.filter((e) => !isIncomeCategory(cats, e.category));
-  const monthIncomeItems = month.filter((e) => isIncomeCategory(cats, e.category));
-  const spent = total(monthExpenseItems),
-    income = total(monthIncomeItems);
   const remaining = budget - spent;
   const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
-  const byCat = useMemo(
-    () =>
-      cats
-        .filter((c) => !c.income)
-        .map((c) => ({ ...c, value: total(monthExpenseItems.filter((e) => e.category === c.id)) }))
-        .filter((c) => c.value)
-        .sort((a, b) => b.value - a.value),
-    [monthExpenseItems, cats],
-  );
-  const spendByDay = useMemo(() => {
-    const m = {};
-    expenses.forEach((e) => {
-      m[e.date] = (m[e.date] || 0) + Number(e.amount);
-    });
-    return m;
-  }, [expenses]);
-  const visibleExpenses = useMemo(
-    () =>
-      expenses
-        .filter(
-          (e) =>
-            (e.description + ' ' + (e.note || '')).toLowerCase().includes(search.toLowerCase()) &&
-            (!dateFrom || e.date >= dateFrom) &&
-            (!dateTo || e.date <= dateTo) &&
-            (!amountMin || Number(e.amount) >= Number(amountMin)) &&
-            (!amountMax || Number(e.amount) <= Number(amountMax)),
-        )
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [expenses, search, dateFrom, dateTo, amountMin, amountMax],
-  );
-  const dateFilterActive = dateFrom || dateTo || amountMin || amountMax;
-  const singleDaySelected = dateFrom && dateFrom === dateTo ? dateFrom : null;
   // same-day expenses shown under Add-expense form
   const sameDayExpenses = useMemo(
     () =>
@@ -252,20 +176,6 @@ function AppInner() {
     [expenses, date, editingId],
   );
   // per-category spend for Budget tab progress bars
-  const categorySpend = useMemo(() => {
-    const m = {};
-    monthExpenseItems.forEach((e) => {
-      m[e.category] = (m[e.category] || 0) + Number(e.amount);
-    });
-    return m;
-  }, [monthExpenseItems]);
-  // quick-add chips for repeated entries
-  const quickAdd = useMemo(() => computeQuickAddSuggestions(expenses, 6), [expenses]);
-  const streaks = useMemo(() => computeStreaks(expenses, today()), [expenses]);
-  const comparison = useMemo(
-    () => computePeriodComparison(expenses, cats, today()),
-    [expenses, cats],
-  );
 
   function resetForm(presetDate) {
     setEditingId(null);
@@ -298,86 +208,28 @@ function AppInner() {
   }
   function save() {
     if (!Number(amount)) return Alert.alert('Enter amount');
-    if (editingId) {
-      setExpenses(
-        expenses.map((e) =>
-          e.id === editingId
-            ? {
-                ...e,
-                amount: Number(amount),
-                description: desc || cats.find((c) => c.id === category)?.name,
-                date,
-                category,
-                paymentMethod: method,
-                note,
-              }
-            : e,
-        ),
-      );
-    } else if (repeat !== 'none') {
-      // generate occurrences due up to today if start date is in the past
-      const template = {
-        id: 'r-' + Date.now(),
+    saveTrackedExpense(
+      {
+        id: editingId || Date.now().toString(),
         amount: Number(amount),
         description: desc || cats.find((c) => c.id === category)?.name,
+        date,
         category,
         paymentMethod: method,
         note,
-        frequency: repeat,
-        startDate: date,
-        active: true,
-        lastGeneratedDate: null,
-      };
-      const { newExpenses, updatedTemplates } = generateDueExpenses([template], expenses, today());
-      setRecurring([...recurring, ...updatedTemplates]);
-      setExpenses([...newExpenses, ...expenses]);
-    } else {
-      setExpenses([
-        {
-          id: Date.now().toString(),
-          amount: Number(amount),
-          description: desc || cats.find((c) => c.id === category)?.name,
-          date,
-          category,
-          paymentMethod: method,
-          note,
-        },
-        ...expenses,
-      ]);
-    }
+      },
+      repeat,
+      editingId ? { id: editingId } : null,
+    );
     resetForm();
     setTab('expenses');
   }
   function removeExpense(id) {
-    setExpenses((prev) => {
-      const index = prev.findIndex((e) => e.id === id);
-      if (index === -1) return prev;
-      const item = prev[index];
-      showSnackbar('Expense deleted', () =>
-        setExpenses((p) => {
-          const n = p.slice();
-          n.splice(index, 0, item);
-          return n;
-        }),
-      );
-      return prev.filter((e) => e.id !== id);
-    });
+    removeTrackedExpense(id);
   }
   // one-tap re-log of a past entry
   function addQuickExpense(sugg) {
-    const newExpense = {
-      id: Date.now().toString(),
-      amount: sugg.amount,
-      description: sugg.description,
-      date: today(),
-      category: sugg.category,
-      paymentMethod: sugg.paymentMethod,
-      note: '',
-    };
-    setExpenses((prev) => [newExpense, ...prev]);
-    showSnackbar(`Added ${sugg.description} · ${formatINR(sugg.amount)}`, () =>
-      setExpenses((prev) => prev.filter((e) => e.id !== newExpense.id)),
-    );
+    addTrackedQuickExpense(sugg);
   }
   function addCategory() {
     if (!newCat.trim()) return;
@@ -409,7 +261,7 @@ function AppInner() {
     }
   }
   function toggleRecurring(id) {
-    setRecurring(recurring.map((t) => (t.id === id ? { ...t, active: !t.active } : t)));
+    toggleTrackedRecurring(id);
   }
   function deleteRecurring(id) {
     Alert.alert(
@@ -426,7 +278,7 @@ function AppInner() {
     );
   }
   function setCategoryBudget(id, value) {
-    setCategoryBudgets({ ...categoryBudgets, [id]: Number(value) || 0 });
+    setTrackedCategoryBudget(id, value);
   }
   async function exportExcel() {
     const rows = toExpenseRows(expenses, cats);
@@ -798,6 +650,19 @@ function AppInner() {
               value={search}
               onChangeText={setSearch}
             />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {[{ id: 'all', name: 'All categories', icon: '' }, ...cats].map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => setFilter(item.id)}
+                  style={[s.chip, filter === item.id && s.selected]}
+                >
+                  <Text style={s.chipText}>
+                    {item.icon} {item.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TouchableOpacity
               style={s.dateToggle}
               onPress={() => setShowDateFilter(!showDateFilter)}

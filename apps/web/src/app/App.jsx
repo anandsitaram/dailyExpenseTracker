@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import {
   PieChart as PieChartIcon,
   Home,
@@ -16,30 +16,19 @@ import {
 import * as XLSX from 'xlsx';
 import {
   defaultCategories,
-  defaultProfile,
-  emptyExpenses,
   formatINR,
   total,
   monthNames,
-  isIncomeCategory,
   buildBackupPayload,
   parseBackupPayload,
   isEncryptedBackupText,
-  defaultAppLock,
-  isValidPin,
   frequencyLabels,
-  generateDueExpenses,
-  computeQuickAddSuggestions,
-  computeStreaks,
-  computePeriodComparison,
   normalizeImportedRows,
   todayDateKey,
-} from '../../../../packages/core/src/index.js';
+} from '../../../core/src/index.js';
+import { useExpenseTracker } from '../../../core/src/useExpenseTracker.js';
 import { secureGet, secureSet } from '../services/storage.js';
-import {
-  encryptBackupPayload,
-  decryptBackupPayload,
-} from '../../../../packages/core/src/backupCrypto.js';
+import { encryptBackupPayload, decryptBackupPayload } from '../../../core/src/backupCrypto.js';
 import {
   Metric,
   Panel,
@@ -60,26 +49,69 @@ import {
 import '../styles/style.css';
 const today = todayDateKey;
 function App() {
-  const [expenses, setExpenses] = useState(emptyExpenses);
-  const [categories, setCategories] = useState(defaultCategories);
-  const [budget, setBudget] = useState(0);
-  const [categoryBudgets, setCategoryBudgets] = useState({});
-  const [recurring, setRecurring] = useState([]);
-  const [appLock, setAppLock] = useState(defaultAppLock);
-  const [profile, setProfile] = useState(defaultProfile);
-  const [theme, setTheme] = useState('light');
-  const [loaded, setLoaded] = useState(false),
-    [loadError, setLoadError] = useState(null);
+  const {
+    expenses,
+    setExpenses,
+    categories,
+    setCategories,
+    budget,
+    setBudget,
+    categoryBudgets,
+    setCategoryBudgets,
+    recurring,
+    setRecurring,
+    appLock,
+    setAppLock,
+    profile,
+    setProfile,
+    theme,
+    setTheme,
+    onboardingDone,
+    setOnboardingDone,
+    loaded,
+    loadError,
+    search,
+    setSearch,
+    filter,
+    setFilter,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    amountMin,
+    setAmountMin,
+    amountMax,
+    setAmountMax,
+    month,
+    monthTotal,
+    monthIncomeTotal,
+    remaining,
+    byCat,
+    categorySpend,
+    daily,
+    spendByDay,
+    visibleExpenses: visible,
+    quickAdd,
+    streaks,
+    comparison,
+    dateFilterActive,
+    singleDaySelected,
+    undoState,
+    undoLast,
+    saveExpense: saveTrackedExpense,
+    removeExpense: removeTrackedExpense,
+    addQuickExpense: addTrackedQuickExpense,
+    toggleRecurring: toggleTrackedRecurring,
+    setCategoryBudget: setTrackedCategoryBudget,
+  } = useExpenseTracker({
+    storage: {
+      get: (key, fallback) => secureGet(`det-${key}`, fallback),
+      set: (key, value) => secureSet(`det-${key}`, value),
+    },
+  });
   const [tab, setTab] = useState('dashboard'),
-    [editing, setEditing] = useState(null),
-    [search, setSearch] = useState(''),
-    [filter, setFilter] = useState('all');
+    [editing, setEditing] = useState(null);
   const [addPresetDate, setAddPresetDate] = useState(null);
-  const [dateFrom, setDateFrom] = useState(''),
-    [dateTo, setDateTo] = useState(''),
-    [amountMin, setAmountMin] = useState(''),
-    [amountMax, setAmountMax] = useState('');
-  const [onboardingDone, setOnboardingDone] = useState(true);
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
@@ -94,198 +126,22 @@ function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [appLock.enabled]);
 
-  // --- undo snackbar ---
-  const [undoState, setUndoState] = useState(null); // {message,onUndo}
-  const undoTimer = useRef(null);
-  function flashUndo(message, onUndo) {
-    clearTimeout(undoTimer.current);
-    setUndoState({ message, onUndo });
-    undoTimer.current = setTimeout(() => setUndoState(null), 6000);
-  }
-  function undoLast() {
-    if (!undoState) return;
-    undoState.onUndo();
-    clearTimeout(undoTimer.current);
-    setUndoState(null);
-  }
-
-  // load once on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const [e, c, b, p, cb, r, al, th, ob] = await Promise.all([
-          secureGet('det-expenses', emptyExpenses),
-          secureGet('det-categories', defaultCategories),
-          secureGet('det-budget', 0),
-          secureGet('det-profile', defaultProfile),
-          secureGet('det-categoryBudgets', {}),
-          secureGet('det-recurring', []),
-          secureGet('det-appLock', defaultAppLock),
-          secureGet('det-theme', 'light'),
-          secureGet('det-onboardingDone', false),
-        ]);
-        const { newExpenses, updatedTemplates } = generateDueExpenses(r, e, today());
-        const mergedExpenses = newExpenses.length ? [...newExpenses, ...e] : e;
-        setExpenses(mergedExpenses);
-        setCategories(c);
-        setBudget(Number(b) || 0);
-        setProfile({ ...defaultProfile, ...p });
-        setCategoryBudgets(cb);
-        setRecurring(updatedTemplates);
-        setAppLock({ ...defaultAppLock, ...al });
-        setTheme(th === 'dark' ? 'dark' : 'light');
-        setOnboardingDone(!!ob);
-        setLoaded(true);
-      } catch (error) {
-        console.error('Failed to load encrypted app data', error);
-        setLoadError('Unable to unlock your saved data. Restore a backup or reload the app.');
-      }
-    })();
-  }, []);
-  // wait for loaded, else placeholder state overwrites storage
-  useEffect(() => {
-    if (loaded) secureSet('det-expenses', expenses).catch(console.error);
-  }, [expenses, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-categories', categories).catch(console.error);
-  }, [categories, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-budget', budget).catch(console.error);
-  }, [budget, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-profile', profile).catch(console.error);
-  }, [profile, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-categoryBudgets', categoryBudgets).catch(console.error);
-  }, [categoryBudgets, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-recurring', recurring).catch(console.error);
-  }, [recurring, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-appLock', appLock).catch(console.error);
-  }, [appLock, loaded]);
-  useEffect(() => {
-    if (loaded) secureSet('det-onboardingDone', onboardingDone).catch(console.error);
-  }, [onboardingDone, loaded]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    if (loaded) secureSet('det-theme', theme).catch(console.error);
-  }, [theme, loaded]);
-
-  const month = expenses.filter((e) => e.date.startsWith(today().slice(0, 7)));
-  const monthExpenseItems = month.filter((e) => !isIncomeCategory(categories, e.category));
-  const monthIncomeItems = month.filter((e) => isIncomeCategory(categories, e.category));
-  const monthTotal = total(monthExpenseItems);
-  const monthIncomeTotal = total(monthIncomeItems);
-  const remaining = budget - monthTotal;
-  const byCat = useMemo(
-    () =>
-      categories
-        .filter((c) => !c.income)
-        .map((c) => ({
-          name: c.name,
-          value: total(monthExpenseItems.filter((e) => e.category === c.id)),
-        }))
-        .filter((x) => x.value),
-    [monthExpenseItems, categories],
-  );
-  const categorySpend = useMemo(() => {
-    const m = {};
-    monthExpenseItems.forEach((e) => {
-      m[e.category] = (m[e.category] || 0) + Number(e.amount);
-    });
-    return m;
-  }, [monthExpenseItems]);
-  const daily = useMemo(() => {
-    let m = {};
-    monthExpenseItems.forEach((e) => (m[e.date] = (m[e.date] || 0) + Number(e.amount)));
-    return Object.entries(m)
-      .sort()
-      .map(([date, amount]) => ({ date: date.slice(5), amount }));
-  }, [monthExpenseItems]);
-  const top = byCat.slice().sort((a, b) => b.value - a.value)[0];
-  const visible = expenses
-    .filter(
-      (e) =>
-        (e.description + ' ' + e.note).toLowerCase().includes(search.toLowerCase()) &&
-        (filter === 'all' || e.category === filter) &&
-        (!dateFrom || e.date >= dateFrom) &&
-        (!dateTo || e.date <= dateTo) &&
-        (!amountMin || Number(e.amount) >= Number(amountMin)) &&
-        (!amountMax || Number(e.amount) <= Number(amountMax)),
-    )
-    .sort((a, b) => b.date.localeCompare(a.date));
-  const dateFilterActive = dateFrom || dateTo || amountMin || amountMax;
-  const singleDaySelected = dateFrom && dateFrom === dateTo ? dateFrom : null;
-
-  const spendByDay = useMemo(() => {
-    const m = {};
-    expenses.forEach((e) => {
-      m[e.date] = (m[e.date] || 0) + Number(e.amount);
-    });
-    return m;
-  }, [expenses]);
-  // quick-add chips for repeated entries
-  const quickAdd = useMemo(() => computeQuickAddSuggestions(expenses, 6), [expenses]);
-  const streaks = useMemo(() => computeStreaks(expenses, today()), [expenses]);
-  const comparison = useMemo(
-    () => computePeriodComparison(expenses, categories, today()),
-    [expenses, categories],
-  );
+  }, [theme]);
+  const top = byCat[0];
 
   function saveExpense(x, repeat) {
-    if (!editing && repeat && repeat !== 'none') {
-      const template = {
-        id: 'r-' + Date.now(),
-        amount: x.amount,
-        description: x.description,
-        category: x.category,
-        paymentMethod: x.paymentMethod,
-        note: x.note,
-        frequency: repeat,
-        startDate: x.date,
-        active: true,
-        lastGeneratedDate: null,
-      };
-      const { newExpenses, updatedTemplates } = generateDueExpenses([template], expenses, today());
-      setRecurring((p) => [...p, ...updatedTemplates]);
-      setExpenses((p) => [...newExpenses, ...p]);
-    } else {
-      setExpenses((p) => (editing ? p.map((e) => (e.id === x.id ? x : e)) : [x, ...p]));
-    }
+    saveTrackedExpense(x, repeat, editing);
     setEditing(null);
     setTab('expenses');
   }
   function remove(id) {
-    setExpenses((p) => {
-      const index = p.findIndex((e) => e.id === id);
-      if (index === -1) return p;
-      const item = p[index];
-      flashUndo('Expense deleted', () =>
-        setExpenses((prev) => {
-          const n = prev.slice();
-          n.splice(index, 0, item);
-          return n;
-        }),
-      );
-      return p.filter((e) => e.id !== id);
-    });
+    removeTrackedExpense(id);
   }
   // one-click re-log of a past entry
   function addQuickExpense(sugg) {
-    const newExpense = {
-      id: Date.now().toString(),
-      amount: sugg.amount,
-      description: sugg.description,
-      date: today(),
-      category: sugg.category,
-      paymentMethod: sugg.paymentMethod,
-      note: '',
-    };
-    setExpenses((p) => [newExpense, ...p]);
-    flashUndo(`Added ${sugg.description} · ${formatINR(sugg.amount)}`, () =>
-      setExpenses((p) => p.filter((e) => e.id !== newExpense.id)),
-    );
+    addTrackedQuickExpense(sugg);
   }
   function startAdd(presetDate) {
     setEditing(null);
@@ -302,7 +158,7 @@ function App() {
     startAdd(d);
   }
   function toggleRecurring(id) {
-    setRecurring((p) => p.map((t) => (t.id === id ? { ...t, active: !t.active } : t)));
+    toggleTrackedRecurring(id);
   }
   function deleteRecurring(id) {
     if (
@@ -313,7 +169,7 @@ function App() {
       setRecurring((p) => p.filter((t) => t.id !== id));
   }
   function setCategoryBudget(id, value) {
-    setCategoryBudgets((p) => ({ ...p, [id]: Number(value) || 0 }));
+    setTrackedCategoryBudget(id, value);
   }
 
   function exportCSV() {

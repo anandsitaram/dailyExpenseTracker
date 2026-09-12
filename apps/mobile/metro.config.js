@@ -8,7 +8,7 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 const config = {
   projectRoot,
 
-  watchFolders: [workspaceRoot, path.resolve(workspaceRoot, 'packages/core')],
+  watchFolders: [workspaceRoot, path.resolve(workspaceRoot, 'apps/core')],
 
   resolver: {
     unstable_enableSymlinks: false,

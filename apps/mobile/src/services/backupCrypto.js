@@ -1,4 +1,1 @@
-export {
-  encryptBackupPayload,
-  decryptBackupPayload,
-} from '../../../../packages/core/src/backupCrypto.js';
+export { encryptBackupPayload, decryptBackupPayload } from '../../../core/src/backupCrypto.js';

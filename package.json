@@ -5,7 +5,7 @@
   "workspaces": [
     "apps/web",
     "apps/mobile",
-    "packages/*"
+    "apps/core"
   ],
   "scripts": {
     "web:dev": "npm --prefix apps/web run dev",

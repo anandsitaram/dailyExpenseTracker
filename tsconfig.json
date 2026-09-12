@@ -7,5 +7,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["packages/core/src/types.ts"]
+  "include": ["apps/core/src/types.ts"]
 }

@@ -16,7 +16,7 @@ import {
   computeStreaks,
   computePeriodComparison,
   normalizeImportedRows,
-} from '../../../packages/core/src/index.js';
+} from '../../core/src/index.js';
 
 describe('formatINR', () => {
   test('formats a positive amount as INR with no decimals', () => {
